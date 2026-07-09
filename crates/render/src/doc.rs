@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use std::fmt::Write as _;
 
 use intelscribe_core::cvss;
+use intelscribe_core::frameworks;
 use intelscribe_core::model::{Engagement, Incident, Phase};
 use intelscribe_core::packs;
 use intelscribe_core::theme::Palette;
@@ -74,6 +75,17 @@ fn severity_rating_color<'a>(p: &'a Palette, rating: &str) -> &'a str {
         "High" => &p.severity_high,
         "Medium" => &p.severity_medium,
         "Low" => &p.severity_low,
+        _ => &p.severity_info,
+    }
+}
+
+/// Map an ACSC category tier to the theme's severity palette.
+fn tier_color<'a>(p: &'a Palette, tier: &str) -> &'a str {
+    match tier {
+        "critical" => &p.severity_critical,
+        "high" => &p.severity_high,
+        "medium" => &p.severity_medium,
+        "low" => &p.severity_low,
         _ => &p.severity_info,
     }
 }
@@ -170,6 +182,8 @@ pub fn build_source(e: &Engagement, theme: &Theme, tpl: &ReportTemplate, art_sty
     for (i, inc) in e.incidents.iter().enumerate() {
         technical_analysis(&mut s, inc, i + 1, theme, tpl);
     }
+
+    essential_eight_section(&mut s, e, theme);
 
     s
 }
@@ -279,15 +293,30 @@ fn exec_summary(s: &mut String, inc: &Incident, n: usize, theme: &Theme) {
         _ => String::new(),
     };
 
+    // Optional ASD/ACSC category row.
+    let acsc_row = match frameworks::acsc_category(&inc.acsc_category) {
+        Some(cat) if !inc.acsc_category.trim().is_empty() => {
+            let color = tier_color(p, &cat.tier);
+            format!(
+                "\n[#text(weight: \"bold\")[ASD category:]], [#box(fill: rgb(\"{color}\"), radius: 3pt, inset: (x: 7pt, y: 3.5pt))[#text(fill: white, size: 8.5pt, weight: \"bold\")[{id}]] #h(6pt) #text(size: 8.5pt)[{label}]],",
+                color = color,
+                id = esc(&cat.id),
+                label = esc(&cat.label),
+            )
+        }
+        _ => String::new(),
+    };
+
     let _ = writeln!(
         s,
-        "#table(columns: (110pt, 1fr), stroke: none, inset: (y: 4pt, x: 0pt),\n[#text(weight: \"bold\")[Incident ID:]], [#text(font: \"{mono}\", size: 9pt)[{id}]],\n[#text(weight: \"bold\")[Severity:]], [#box(fill: rgb(\"{sev}\"), radius: 3pt, inset: (x: 7pt, y: 3.5pt))[#text(fill: white, size: 8.5pt, weight: \"bold\", tracking: 0.8pt)[{sevlabel}]]],{cvss_row}\n[#text(weight: \"bold\")[Status:]], [{status}],\n)",
+        "#table(columns: (110pt, 1fr), stroke: none, inset: (y: 4pt, x: 0pt),\n[#text(weight: \"bold\")[Incident ID:]], [#text(font: \"{mono}\", size: 9pt)[{id}]],\n[#text(weight: \"bold\")[Severity:]], [#box(fill: rgb(\"{sev}\"), radius: 3pt, inset: (x: 7pt, y: 3.5pt))[#text(fill: white, size: 8.5pt, weight: \"bold\", tracking: 0.8pt)[{sevlabel}]]],{cvss_row}{acsc_row}\n[#text(weight: \"bold\")[Status:]], [{status}],\n)",
         mono = esc_str(&theme.typography.mono_font),
         id = esc(&inc.incident_id),
         sev = sev,
         sevlabel = inc.severity.label().to_uppercase(),
         status = esc(&inc.status),
         cvss_row = cvss_row,
+        acsc_row = acsc_row,
     );
 
     if !inc.overview.trim().is_empty() {
@@ -497,6 +526,92 @@ fn technical_analysis(
 
     recommendations(s, inc, theme, tpl);
     framework_alignment(s, inc, theme);
+    regulatory_section(s, inc, theme);
+}
+
+/// Regulatory & Reporting Obligations: deterministic SOCI Act and OAIC NDB
+/// determinations from the analyst's assessment inputs.
+fn regulatory_section(s: &mut String, inc: &Incident, theme: &Theme) {
+    let p = &theme.palette;
+    let reg = &inc.regulatory;
+    let engaged = reg.critical_infrastructure
+        || reg.personal_info_involved
+        || !reg.soci_impact.trim().is_empty();
+    if !engaged {
+        return;
+    }
+    s.push_str("== Regulatory & Reporting Obligations\n");
+    let _ = writeln!(
+        s,
+        "#text(size: 8.5pt, fill: rgb(\"{}\"), style: \"italic\")[Advisory assessment derived from the analyst's inputs against the SOCI Act and the OAIC Notifiable Data Breaches scheme. This is decision support, not legal advice — confirm obligations with legal/privacy counsel.]\n",
+        p.muted
+    );
+
+    for det in [frameworks::assess_soci(reg), frameworks::assess_ndb(reg)] {
+        let edge = if det.obligation { &p.severity_high } else { &p.accent };
+        let _ = writeln!(
+            s,
+            "#block(width: 100%, fill: rgb(\"{stripe}\"), stroke: (left: 3pt + rgb(\"{edge}\")), inset: 10pt, radius: 3pt, above: 8pt)[#text(weight: \"bold\", size: 10pt, fill: rgb(\"{primary}\"))[{headline}]#linebreak()#text(size: 9.5pt)[{detail}]]\n",
+            stripe = p.stripe,
+            edge = edge,
+            primary = p.primary,
+            headline = esc(&det.headline),
+            detail = esc(&det.detail),
+        );
+    }
+}
+
+/// Essential Eight Maturity Assessment (engagement-level): a matrix of the
+/// eight strategies with current vs target maturity and a met/gap status.
+fn essential_eight_section(s: &mut String, e: &Engagement, theme: &Theme) {
+    let p = &theme.palette;
+    if e.essential_eight.is_empty() {
+        return;
+    }
+    s.push_str("#pagebreak()\n= Essential Eight Maturity Assessment\n");
+    let _ = writeln!(
+        s,
+        "#text(size: 8.5pt, fill: rgb(\"{}\"), style: \"italic\")[Self-assessed maturity against the ACSC Essential Eight. Maturity Levels: ML0 posture weaknesses; ML1 commodity tradecraft; ML2 modest step-up; ML3 adaptive adversaries.]\n",
+        p.muted
+    );
+
+    let mut rows = String::new();
+    for item in &e.essential_eight {
+        let current = item.current_level.min(3);
+        let target = item.target_level.min(3);
+        let met = current >= target;
+        let cur_color = if met { &p.severity_low } else { &p.severity_high };
+        let status = if met {
+            "Met".to_string()
+        } else {
+            format!("Gap +{}", target - current)
+        };
+        let status_color = if met { &p.severity_low } else { &p.severity_high };
+        let _ = writeln!(
+            rows,
+            "[{strategy}], [#box(fill: rgb(\"{cur_color}\"), radius: 3pt, inset: (x: 6pt, y: 3pt))[#text(fill: white, size: 8.5pt, weight: \"bold\")[{cur}]]], [#text(size: 8.5pt)[{tgt}]], [#text(fill: rgb(\"{status_color}\"), weight: \"bold\", size: 8.5pt)[{status}]], [#text(size: 8.5pt)[{notes}]],",
+            strategy = esc(&item.strategy),
+            cur_color = cur_color,
+            cur = frameworks::e8_level_name(current),
+            tgt = frameworks::e8_level_name(target),
+            status_color = status_color,
+            status = status,
+            notes = esc(&item.notes),
+        );
+    }
+    let _ = writeln!(
+        s,
+        "#table(columns: (1.6fr, 58pt, 52pt, 64pt, 1.7fr), stroke: 0.5pt + rgb(\"{border}\"), inset: 6pt, fill: (x, y) => if y == 0 {{ rgb(\"{primary}\") }} else if calc.even(y) {{ rgb(\"{stripe}\") }} else {{ white }},\n{h1},\n{h2},\n{h3},\n{h4},\n{h5},\n{rows})\n",
+        h1 = table_header_cell("Mitigation Strategy"),
+        h2 = table_header_cell("Current"),
+        h3 = table_header_cell("Target"),
+        h4 = table_header_cell("Status"),
+        h5 = table_header_cell("Notes"),
+        border = p.table_border,
+        primary = p.primary,
+        stripe = p.stripe,
+        rows = rows,
+    );
 }
 
 /// Framework Alignment: quotes the analyst-cited ISM controls verbatim from

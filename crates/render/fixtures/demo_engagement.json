@@ -7,6 +7,16 @@
   "date": "14 March 2026",
   "version": "1.0",
   "classification": "OFFICIAL: Sensitive",
+  "essential_eight": [
+    { "strategy": "Application control", "current_level": 1, "target_level": 2, "notes": "Enforced on servers; workstation rollout in progress." },
+    { "strategy": "Patch applications", "current_level": 2, "target_level": 2, "notes": "48-hour SLA for internet-facing apps." },
+    { "strategy": "Configure Microsoft Office macro settings", "current_level": 1, "target_level": 2, "notes": "Internet macros not yet blocked — exploited in this incident." },
+    { "strategy": "User application hardening", "current_level": 1, "target_level": 2, "notes": "Browser hardening partial." },
+    { "strategy": "Restrict administrative privileges", "current_level": 1, "target_level": 3, "notes": "No tiered administration model; flat privileges." },
+    { "strategy": "Patch operating systems", "current_level": 2, "target_level": 2, "notes": "Monthly cycle; DCs prioritised." },
+    { "strategy": "Multi-factor authentication", "current_level": 2, "target_level": 3, "notes": "MFA on remote access; not yet on all privileged actions." },
+    { "strategy": "Regular backups", "current_level": 2, "target_level": 2, "notes": "Tested restores quarterly." }
+  ],
   "incidents": [
     {
       "incident_id": "a1b2c3d4-0000-4a5b-9c8d-112233445566",
@@ -107,7 +117,16 @@
         "Uplift Essential Eight maturity for macro settings and application control to Maturity Level Two as a minimum."
       ],
       "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:H/I:H/A:H",
-      "ism_controls": ["ISM-1488", "ISM-1490", "ISM-1657", "ISM-0042"]
+      "ism_controls": ["ISM-1488", "ISM-1490", "ISM-1657", "ISM-0042"],
+      "acsc_category": "C3",
+      "regulatory": {
+        "critical_infrastructure": true,
+        "soci_impact": "significant",
+        "aware_time": "14 March 2026, 10:05",
+        "personal_info_involved": true,
+        "serious_harm_likely": true,
+        "remedial_action_prevents_harm": false
+      }
     }
   ]
 }

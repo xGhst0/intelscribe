@@ -54,7 +54,43 @@ const IOC_TYPES = [
   "Windows Service", "Scheduled Task", "Email Address", "Other",
 ];
 
+const ACSC_CATEGORIES = [
+  ["", "(not categorised)"],
+  ["C1", "C1 — national significance"],
+  ["C2", "C2 — nationally significant org"],
+  ["C3", "C3 — significant org"],
+  ["C4", "C4 — small / medium org"],
+  ["C5", "C5 — unsuccessful attack"],
+  ["C6", "C6 — non-malicious event"],
+];
+
+const SOCI_IMPACT = [
+  ["", "(not assessed)"],
+  ["none", "No reportable impact"],
+  ["relevant", "Relevant impact — 72 hours"],
+  ["significant", "Significant impact — 12 hours"],
+];
+
+const E8_STRATEGIES = [
+  "Application control",
+  "Patch applications",
+  "Configure Microsoft Office macro settings",
+  "User application hardening",
+  "Restrict administrative privileges",
+  "Patch operating systems",
+  "Multi-factor authentication",
+  "Regular backups",
+];
+
 /* ---------- State ---------- */
+
+function defaultRegulatory() {
+  return {
+    critical_infrastructure: false, soci_impact: "", aware_time: "",
+    personal_info_involved: false, serious_harm_likely: false,
+    remedial_action_prevents_harm: false,
+  };
+}
 
 function defaultIncident() {
   return {
@@ -63,6 +99,7 @@ function defaultIncident() {
     stakeholder_impact: "", root_cause: "",
     hosts: [], accounts: [], detections: [], iocs: [], events: [], techniques: [],
     additional_recommendations: [], ism_controls: [], cvss_vector: "",
+    acsc_category: "", regulatory: defaultRegulatory(),
   };
 }
 
@@ -75,6 +112,7 @@ function defaultEngagement() {
     client: "", analyst: "", analyst_title: "Security Analyst",
     date, version: "1.0", classification: "OFFICIAL: Sensitive",
     incidents: [defaultIncident()],
+    essential_eight: [],
   };
 }
 
@@ -121,6 +159,23 @@ function field(obj, key, label, kind = "text", options = null) {
 
 function row(...fields) {
   return el("div", { class: "row" }, ...fields);
+}
+
+function checkboxField(obj, key, label) {
+  const input = el("input", { type: "checkbox" });
+  input.checked = !!obj[key];
+  input.addEventListener("change", () => { obj[key] = input.checked; schedule(); });
+  const wrap = el("label", { class: "check" }, input, document.createTextNode(" " + label));
+  return el("div", { class: "field" }, wrap);
+}
+
+/* Maturity-level select (ML0–ML3) that stores a Number, not a string. */
+function levelField(obj, key, label) {
+  const input = el("select");
+  for (let i = 0; i <= 3; i++) input.append(el("option", { value: String(i) }, "ML" + i));
+  input.value = String(obj[key] ?? 0);
+  input.addEventListener("change", () => { obj[key] = parseInt(input.value, 10); schedule(); });
+  return wrapField(label, input);
 }
 
 /* Generic editable list of objects. */
@@ -520,7 +575,44 @@ function incidentSection(inc, idx) {
     section("CVSS 3.1 severity", false, cvssBuilder(inc)),
 
     section("ISM controls (quoted verbatim)", false, ismList(inc.ism_controls)),
+
+    field(inc, "acsc_category", "ASD / ACSC incident category", "select", ACSC_CATEGORIES),
+
+    section("Regulatory & reporting (SOCI · OAIC NDB)", false,
+      checkboxField(inc.regulatory, "critical_infrastructure",
+        "Asset is critical infrastructure (SOCI Act applies)"),
+      field(inc.regulatory, "soci_impact", "SOCI impact assessment", "select", SOCI_IMPACT),
+      field(inc.regulatory, "aware_time", "Time the entity became aware"),
+      checkboxField(inc.regulatory, "personal_info_involved",
+        "Personal information was involved (engages OAIC NDB)"),
+      checkboxField(inc.regulatory, "serious_harm_likely",
+        "Serious harm to individuals is assessed as likely"),
+      checkboxField(inc.regulatory, "remedial_action_prevents_harm",
+        "Remedial action has prevented the likely serious harm"),
+    ),
   );
+}
+
+/* Essential Eight maturity assessment editor (engagement-level). */
+function e8Section() {
+  const populate = el("button", { class: "add", type: "button",
+    onclick: () => {
+      state.essential_eight = E8_STRATEGIES.map((s) => ({
+        strategy: s, current_level: 0, target_level: 3, notes: "",
+      }));
+      rebuild();
+      schedule();
+    } }, "Populate all 8 strategies");
+  const list = itemList(state.essential_eight, (box, item) => {
+    box.append(
+      field(item, "strategy", "Strategy", "select", E8_STRATEGIES),
+      row(levelField(item, "current_level", "Current maturity"),
+          levelField(item, "target_level", "Target maturity")),
+      field(item, "notes", "Notes", "textarea"),
+    );
+  }, () => ({ strategy: E8_STRATEGIES[0], current_level: 0, target_level: 3, notes: "" }),
+    "+ Add strategy");
+  return el("div", {}, populate, list);
 }
 
 function rebuild() {
@@ -540,6 +632,7 @@ function rebuild() {
       ),
       field(state, "classification", "Classification marking"),
     ),
+    section("Essential Eight maturity (engagement-level)", false, e8Section()),
   );
   state.incidents.forEach((inc, idx) => form.append(incidentSection(inc, idx)));
   form.append(el("button", {

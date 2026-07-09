@@ -1,0 +1,12 @@
+{
+  "_comment": "Concise descriptors for the ASD/ACSC Cyber Security Incident Categorisation scale (C1 most severe to C6 least). Structure and ordering are per the ASD Cyber Threat Report; verbatim per-category wording should be confirmed against the current ASD matrix. Edit freely — this is data, not code.",
+  "source": "ASD Cyber Security Incident Categorisation scale (C1–C6)",
+  "categories": [
+    { "id": "C1", "tier": "critical", "label": "Sustained disruption or extensive compromise of national significance", "detail": "The most severe category: sustained disruption of essential systems, or extensive compromise, with impact of national significance." },
+    { "id": "C2", "tier": "critical", "label": "Extensive compromise or sustained disruption of a nationally significant organisation", "detail": "Extensive compromise, or sustained disruption of essential systems, affecting a federal/state government body, critical infrastructure provider, or organisation of national significance." },
+    { "id": "C3", "tier": "high", "label": "Moderate compromise of a significant organisation", "detail": "Isolated or moderate compromise of a significant organisation, or extensive compromise of a small organisation." },
+    { "id": "C4", "tier": "medium", "label": "Low-level compromise of a small-to-medium organisation", "detail": "Low-level compromise, or a low-level malicious attack, affecting a small-to-medium organisation or a member of the public." },
+    { "id": "C5", "tier": "low", "label": "Unsuccessful low-level malicious attack", "detail": "An unsuccessful low-level malicious attack or attempted compromise." },
+    { "id": "C6", "tier": "info", "label": "Non-malicious event or request for advice", "detail": "A non-malicious event, or a request for advice, with no compromise identified." }
+  ]
+}

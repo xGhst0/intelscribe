@@ -13,6 +13,18 @@ pub struct Engagement {
     pub version: String,
     pub classification: String,
     pub incidents: Vec<Incident>,
+    /// Engagement-level ACSC Essential Eight maturity self-assessment.
+    pub essential_eight: Vec<EssentialEightItem>,
+}
+
+/// One row of an Essential Eight maturity assessment. Levels are 0–3.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct EssentialEightItem {
+    pub strategy: String,
+    pub current_level: u8,
+    pub target_level: u8,
+    pub notes: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -42,6 +54,29 @@ pub struct Incident {
     /// Optional CVSS 3.1 base vector for the incident, e.g.
     /// "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H".
     pub cvss_vector: String,
+    /// ASD/ACSC incident category, "" or "C1".."C6".
+    pub acsc_category: String,
+    /// Australian regulatory reporting assessment (SOCI Act, OAIC NDB).
+    pub regulatory: Regulatory,
+}
+
+/// Inputs for the Australian regulatory reporting assessment. The analyst sets
+/// these; the determinations are derived deterministically at render time.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct Regulatory {
+    /// The affected asset is a critical infrastructure asset under the SOCI Act.
+    pub critical_infrastructure: bool,
+    /// SOCI impact assessment: "", "none", "relevant", or "significant".
+    pub soci_impact: String,
+    /// When the entity became aware (free text; echoed in the obligation).
+    pub aware_time: String,
+    /// Personal information was involved (engages the OAIC NDB scheme).
+    pub personal_info_involved: bool,
+    /// Serious harm to affected individuals is assessed as likely.
+    pub serious_harm_likely: bool,
+    /// Remedial action is assessed to have prevented the likely serious harm.
+    pub remedial_action_prevents_harm: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]

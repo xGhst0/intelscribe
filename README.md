@@ -33,6 +33,10 @@ the binary, so it runs completely offline (airgap-friendly).
   reproduced from the official OSCAL catalog.
 - **CVSS 3.1 calculator** — a metric-by-metric builder with a live base score,
   faithful to the FIRST.org specification.
+- **Australian frameworks** — ASD/ACSC incident categorisation (C1–C6), an
+  Essential Eight maturity matrix, and deterministic reporting-obligation
+  helpers for the SOCI Act (12h/72h) and the OAIC Notifiable Data Breaches
+  scheme. Advisory decision support, not legal advice.
 - **18 palettes × 7 procedural cover-art styles** — 100+ professional looks;
   all cover art is generated (no stock images, no licensing).
 - **PDF export** — writes to `Desktop\IntelScribe Exports\`.
@@ -131,6 +135,8 @@ cargo run -p intelscribe-core --example build_packs
   auto-draft, 18-palette theme engine with procedural cover art.
 - **Ingestion — done.** Paste logs → IoC extraction (with defang) and ATT&CK
   technique suggestion from incident text.
+- **Australian frameworks — done.** ACSC C1–C6 categorisation, Essential Eight
+  maturity matrix, SOCI Act and OAIC NDB reporting-obligation helpers.
 - **M4 — planned.** More report templates (pentest + retest, threat hunt,
   threat-intel/actor profile, executive one-pager).
 - **M5 — planned.** Evidence vault (hashing, redaction), IoC auto-extraction

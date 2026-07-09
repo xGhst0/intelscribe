@@ -216,6 +216,21 @@ button.add:hover { border-color: var(--accent); }
   line-height: 1.4;
 }
 
+label.check {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text);
+}
+
+label.check input[type="checkbox"] {
+  width: auto;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
 /* ---- Preview pane ---- */
 
 #preview-pane {

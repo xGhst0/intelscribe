@@ -65,6 +65,13 @@ fn generated_sections_appear() {
         "Microsoft Office macros in files originating from the internet are blocked",
         // CVSS score for the sample vector (AV:N/AC:L/PR:N/UI:R/S:C/C:H/I:H/A:H = 9.6).
         "9.6",
+        // Australian frameworks.
+        "ASD category",
+        "Regulatory & Reporting Obligations",
+        "SOCI Act",
+        "12 hours",
+        "eligible data breach",
+        "Essential Eight Maturity Assessment",
     ] {
         assert!(src.contains(expected), "missing section: {expected}");
     }
