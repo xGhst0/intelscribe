@@ -3,8 +3,8 @@
 use std::path::PathBuf;
 
 use intelscribe_core::autofill::{self, DraftSummary};
-use intelscribe_core::model::{Engagement, Incident};
-use intelscribe_core::{packs, template, theme};
+use intelscribe_core::model::{Engagement, Incident, Ioc};
+use intelscribe_core::{extract, packs, template, theme};
 use serde::Serialize;
 
 #[derive(Serialize)]
@@ -74,6 +74,16 @@ fn search_techniques(query: String) -> Vec<packs::Technique> {
 #[tauri::command(rename_all = "snake_case")]
 fn search_ism(query: String) -> Vec<packs::IsmControl> {
     packs::ism_search(&query)
+}
+
+#[tauri::command(rename_all = "snake_case")]
+fn extract_iocs(text: String) -> Vec<Ioc> {
+    extract::extract_iocs(&text)
+}
+
+#[tauri::command(rename_all = "snake_case")]
+fn suggest_techniques(text: String) -> Vec<packs::Technique> {
+    packs::suggest_techniques(&text)
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -148,6 +158,8 @@ fn main() {
             export_pdf,
             search_techniques,
             search_ism,
+            extract_iocs,
+            suggest_techniques,
             score_cvss,
             pack_info,
             draft_summary,

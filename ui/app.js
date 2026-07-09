@@ -23,6 +23,8 @@ function mockInvoke(cmd) {
       return { attack_version: "—", ism_version: "—", technique_count: 0 };
     case "search_techniques":
     case "search_ism":
+    case "extract_iocs":
+    case "suggest_techniques":
       return [];
     default:
       throw "This action needs the IntelScribe desktop app — run: cargo run -p intelscribe-app";
@@ -366,6 +368,79 @@ async function autoDraft(inc) {
   }
 }
 
+/* ---------- Ingestion & auto-mapping ---------- */
+
+function mergeIocs(inc, incoming) {
+  let added = 0;
+  for (const ioc of incoming) {
+    const dup = inc.iocs.some(
+      (x) => x.ioc_type === ioc.ioc_type &&
+             x.indicator.toLowerCase() === ioc.indicator.toLowerCase(),
+    );
+    if (!dup) { inc.iocs.push(ioc); added++; }
+  }
+  return added;
+}
+
+function mergeTechniques(inc, incoming) {
+  let added = 0;
+  for (const t of incoming) {
+    const dup = inc.techniques.some((x) => x.id.toLowerCase() === t.id.toLowerCase());
+    if (!dup) { inc.techniques.push({ id: t.id, name: t.name, tactic: t.tactic }); added++; }
+  }
+  return added;
+}
+
+/* Paste box: extract IoCs and/or suggest ATT&CK techniques from raw text. */
+function quickImport(inc) {
+  const wrap = el("div");
+  const ta = el("textarea", { placeholder: "Paste logs, alert text, or command output…" });
+  ta.style.minHeight = "96px";
+
+  async function run(cmd, merge, noun) {
+    const text = ta.value.trim();
+    if (!text) { setStatus("Paste some text into the import box first."); return; }
+    try {
+      const items = await invoke(cmd, { text });
+      const added = merge(inc, items);
+      rebuild();
+      schedule();
+      setStatus(`${noun}: found ${items.length}, added ${added} new (duplicates skipped). Review and prune.`);
+    } catch (err) {
+      setStatus(String(err), true);
+    }
+  }
+
+  wrap.append(
+    ta,
+    el("div", { class: "row" },
+      el("button", { class: "add", type: "button",
+        onclick: () => run("extract_iocs", mergeIocs, "IoC extraction") }, "⬇ Extract IoCs"),
+      el("button", { class: "add", type: "button",
+        onclick: () => run("suggest_techniques", mergeTechniques, "ATT&CK suggestions") }, "✨ Suggest ATT&CK"),
+    ),
+  );
+  return wrap;
+}
+
+/* Scan everything already written in this incident and suggest techniques. */
+async function suggestFromIncident(inc) {
+  const parts = [inc.overview, inc.root_cause, ...(inc.key_findings || []), ...(inc.immediate_actions || [])];
+  for (const d of inc.detections) parts.push(d.title, d.data_source, d.query, d.result);
+  for (const ev of inc.events) parts.push(ev.description);
+  const text = parts.filter(Boolean).join("\n");
+  if (!text.trim()) { setStatus("Nothing to scan yet — add an overview or some detections first."); return; }
+  try {
+    const techs = await invoke("suggest_techniques", { text });
+    const added = mergeTechniques(inc, techs);
+    rebuild();
+    schedule();
+    setStatus(`Scanned incident text — suggested ${techs.length} technique(s), added ${added} new. Review and prune.`);
+  } catch (err) {
+    setStatus(String(err), true);
+  }
+}
+
 function incidentSection(inc, idx) {
   const label = `Incident ${idx + 1}${inc.title ? " — " + inc.title : ""}`;
   return section(label, idx === 0,
@@ -373,6 +448,7 @@ function incidentSection(inc, idx) {
       class: "add", type: "button",
       onclick: () => autoDraft(inc),
     }, "✨ Auto-draft exec summary from the data below"),
+    section("Quick import — paste logs → extract", false, quickImport(inc)),
     field(inc, "title", "Incident title"),
     row(
       field(inc, "incident_id", "Incident ID"),
@@ -430,10 +506,13 @@ function incidentSection(inc, idx) {
       );
     }, () => ({ timestamp: "", phase: "Reconnaissance", host: "", description: "" }), "+ Add event")),
 
-    section("MITRE ATT&CK techniques", false, itemList(
-      inc.techniques, techniqueFields,
-      () => ({ id: "", name: "", tactic: "" }), "+ Add technique",
-    )),
+    section("MITRE ATT&CK techniques", false,
+      el("button", { class: "add", type: "button", onclick: () => suggestFromIncident(inc) },
+        "✨ Suggest from incident text"),
+      itemList(
+        inc.techniques, techniqueFields,
+        () => ({ id: "", name: "", tactic: "" }), "+ Add technique",
+      )),
 
     section("Analyst recommendations", false,
       stringList(inc.additional_recommendations, "+ Add recommendation")),

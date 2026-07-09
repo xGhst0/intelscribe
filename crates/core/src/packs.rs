@@ -84,6 +84,42 @@ pub fn technique(id: &str) -> Option<Technique> {
     all_techniques().iter().find(|t| t.id == id).cloned()
 }
 
+#[derive(Deserialize)]
+struct TechniqueSignature {
+    technique: String,
+    keywords: Vec<String>,
+}
+
+fn signatures() -> &'static [TechniqueSignature] {
+    static SIGS: OnceLock<Vec<TechniqueSignature>> = OnceLock::new();
+    SIGS.get_or_init(|| {
+        serde_json::from_str(include_str!("../../../packs/technique-signatures.json"))
+            .expect("bundled technique-signatures pack is valid JSON")
+    })
+}
+
+/// Suggest ATT&CK techniques for a block of text (detections, notes, command
+/// output) by matching against the curated signature keywords. Results are
+/// ranked by how many distinct keywords matched, then by id.
+pub fn suggest_techniques(text: &str) -> Vec<Technique> {
+    let hay = text.to_ascii_lowercase();
+    let mut scored: Vec<(usize, Technique)> = Vec::new();
+    for sig in signatures() {
+        let hits = sig
+            .keywords
+            .iter()
+            .filter(|k| hay.contains(k.as_str()))
+            .count();
+        if hits > 0 {
+            if let Some(t) = technique(&sig.technique) {
+                scored.push((hits, t));
+            }
+        }
+    }
+    scored.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.id.cmp(&b.1.id)));
+    scored.into_iter().map(|(_, t)| t).collect()
+}
+
 // ---------------------------------------------------------------------------
 // Curated mitigations (control-level recommendations, from M3)
 // ---------------------------------------------------------------------------
@@ -189,4 +225,36 @@ pub fn ism_search(query: &str) -> Vec<IsmControl> {
         .collect();
     scored.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.id.cmp(&b.1.id)));
     scored.into_iter().take(20).map(|(_, c)| c.clone()).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn packs_load_and_resolve() {
+        assert!(all_techniques().len() > 500, "expected full ATT&CK matrix");
+        assert_eq!(technique("t1003.001").unwrap().name, "LSASS Memory");
+        assert!(ism_control("ISM-1488").is_some());
+        assert!(ism_control("1488").is_some(), "digit-only ISM lookup");
+    }
+
+    #[test]
+    fn suggests_techniques_from_detection_text() {
+        let text = "A masqueraded svchost.exe opened lsass.exe with 0x1010 access \
+                    (comsvcs.dll minidump). Earlier, a 4769 RC4 service ticket request \
+                    indicated kerberoasting of a service account. PsExec (PSEXESVC) was \
+                    used over admin$ to move laterally, and schtasks created a scheduled \
+                    task for persistence.";
+        let ids: Vec<String> = suggest_techniques(text).into_iter().map(|t| t.id).collect();
+        assert!(ids.contains(&"T1003.001".to_string()), "LSASS: {ids:?}");
+        assert!(ids.contains(&"T1558.003".to_string()), "Kerberoasting: {ids:?}");
+        assert!(ids.contains(&"T1021.002".to_string()), "SMB/PsExec: {ids:?}");
+        assert!(ids.contains(&"T1053.005".to_string()), "Scheduled task: {ids:?}");
+    }
+
+    #[test]
+    fn benign_text_yields_no_suggestions() {
+        assert!(suggest_techniques("The quarterly figures look strong this period.").is_empty());
+    }
 }
