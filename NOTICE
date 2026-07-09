@@ -1,0 +1,35 @@
+IntelScribe
+Copyright 2026 Benjamin Sokimi
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+------------------------------------------------------------------------
+Bundled reference data
+------------------------------------------------------------------------
+
+This project embeds preprocessed reference data from third-party sources.
+The processed files under packs/ are derivative works of the following,
+redistributed under their respective terms:
+
+MITRE ATT&CK(R)
+  packs/attack-full.json is derived from the MITRE ATT&CK Enterprise STIX
+  data set (https://github.com/mitre-attack/attack-stix-data).
+  (C) The MITRE Corporation. ATT&CK is a registered trademark of The MITRE
+  Corporation. This work is reproduced and distributed with permission;
+  MITRE ATT&CK content is made available under the ATT&CK Terms of Use
+  (https://attack.mitre.org/resources/legal-and-branding/terms-of-use/).
+
+Australian Government Information Security Manual (ISM)
+  packs/ism.json is derived from the ACSC ISM OSCAL catalog
+  (https://github.com/AustralianCyberSecurityCentre/ism-oscal).
+  (C) Commonwealth of Australia (Australian Signals Directorate). The ISM
+  is licensed under the Creative Commons Attribution 4.0 International
+  licence (https://creativecommons.org/licenses/by/4.0/).
+
+The authoritative versions of these frameworks should always be obtained
+from their official sources. Bundled copies are provided for offline
+convenience and may lag the current release.

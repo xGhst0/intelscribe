@@ -1,0 +1,346 @@
+# IntelScribe theme collection. Each theme = palette + default cover art
+# generator + seed. Cover art styles: hexgrid, circuit, network, radar,
+# binary, contours. Any theme can be paired with any art style in the app,
+# so 18 palettes x 6 generators = 108 distinct looks.
+
+[[themes]]
+name = "Harbour Teal"
+cover_art = "hexgrid"
+art_seed = 11
+[themes.palette]
+primary = "#0b3c49"
+accent = "#14b8c9"
+banner_start = "#041418"
+banner_end = "#0f7285"
+ink = "#20262b"
+muted = "#5c6b73"
+stripe = "#eef5f7"
+table_border = "#d5e1e5"
+severity_critical = "#b8232e"
+severity_high = "#d9622b"
+severity_medium = "#d9a521"
+severity_low = "#3a7d44"
+severity_info = "#4a6fa5"
+
+[[themes]]
+name = "Midnight Slate"
+cover_art = "network"
+art_seed = 23
+[themes.palette]
+primary = "#1e2a3a"
+accent = "#5b8def"
+banner_start = "#0a0f16"
+banner_end = "#2c4a7c"
+ink = "#22262b"
+muted = "#606a76"
+stripe = "#eff2f7"
+table_border = "#d8dee7"
+severity_critical = "#b8232e"
+severity_high = "#d9622b"
+severity_medium = "#d9a521"
+severity_low = "#3a7d44"
+severity_info = "#4a6fa5"
+
+[[themes]]
+name = "Ember"
+cover_art = "circuit"
+art_seed = 5
+[themes.palette]
+primary = "#2b2b2e"
+accent = "#e2452d"
+banner_start = "#151517"
+banner_end = "#6e1d12"
+ink = "#242427"
+muted = "#6b6b70"
+stripe = "#f5f1f0"
+table_border = "#e2dad8"
+severity_critical = "#b8232e"
+severity_high = "#d9622b"
+severity_medium = "#d9a521"
+severity_low = "#3a7d44"
+severity_info = "#4a6fa5"
+
+[[themes]]
+name = "Cobalt Ops"
+cover_art = "circuit"
+art_seed = 41
+[themes.palette]
+primary = "#14284b"
+accent = "#3f7dd9"
+banner_start = "#080f1d"
+banner_end = "#1d4079"
+ink = "#20262b"
+muted = "#5c6b73"
+stripe = "#eef2f8"
+table_border = "#d6deea"
+severity_critical = "#b8232e"
+severity_high = "#d9622b"
+severity_medium = "#d9a521"
+severity_low = "#3a7d44"
+severity_info = "#4a6fa5"
+
+[[themes]]
+name = "Gunmetal"
+cover_art = "contours"
+art_seed = 17
+[themes.palette]
+primary = "#33393f"
+accent = "#9fb3c8"
+banner_start = "#17191c"
+banner_end = "#4b5866"
+ink = "#20262b"
+muted = "#5c6b73"
+stripe = "#f1f3f5"
+table_border = "#dde1e6"
+severity_critical = "#b8232e"
+severity_high = "#d9622b"
+severity_medium = "#d9a521"
+severity_low = "#3a7d44"
+severity_info = "#4a6fa5"
+
+[[themes]]
+name = "Arctic Signal"
+cover_art = "radar"
+art_seed = 29
+[themes.palette]
+primary = "#1b4965"
+accent = "#62b6cb"
+banner_start = "#0a1c28"
+banner_end = "#2d7597"
+ink = "#20262b"
+muted = "#5c6b73"
+stripe = "#eef6f9"
+table_border = "#d4e4ec"
+severity_critical = "#b8232e"
+severity_high = "#d9622b"
+severity_medium = "#d9a521"
+severity_low = "#3a7d44"
+severity_info = "#4a6fa5"
+
+[[themes]]
+name = "Crimson Vector"
+cover_art = "network"
+art_seed = 3
+[themes.palette]
+primary = "#4a1220"
+accent = "#d7263d"
+banner_start = "#1c060c"
+banner_end = "#7c1b2e"
+ink = "#20262b"
+muted = "#5c6b73"
+stripe = "#f8eff1"
+table_border = "#e8d5da"
+severity_critical = "#b8232e"
+severity_high = "#d9622b"
+severity_medium = "#d9a521"
+severity_low = "#3a7d44"
+severity_info = "#4a6fa5"
+
+[[themes]]
+name = "Olive Sentinel"
+cover_art = "contours"
+art_seed = 53
+[themes.palette]
+primary = "#333d29"
+accent = "#a4ac86"
+banner_start = "#171c10"
+banner_end = "#565f41"
+ink = "#20262b"
+muted = "#5c6b73"
+stripe = "#f3f4ee"
+table_border = "#dee0d4"
+severity_critical = "#b8232e"
+severity_high = "#d9622b"
+severity_medium = "#d9a521"
+severity_low = "#3a7d44"
+severity_info = "#4a6fa5"
+
+[[themes]]
+name = "Violet Persistence"
+cover_art = "binary"
+art_seed = 59
+[themes.palette]
+primary = "#2e1a47"
+accent = "#9d4edd"
+banner_start = "#120a1e"
+banner_end = "#542e8b"
+ink = "#20262b"
+muted = "#5c6b73"
+stripe = "#f4f0f8"
+table_border = "#ded4ea"
+severity_critical = "#b8232e"
+severity_high = "#d9622b"
+severity_medium = "#d9a521"
+severity_low = "#3a7d44"
+severity_info = "#4a6fa5"
+
+[[themes]]
+name = "Amber Watch"
+cover_art = "radar"
+art_seed = 31
+[themes.palette]
+primary = "#4a3208"
+accent = "#f2a516"
+banner_start = "#1d1403"
+banner_end = "#8a5f0e"
+ink = "#20262b"
+muted = "#5c6b73"
+stripe = "#f8f4ea"
+table_border = "#e8ddc7"
+severity_critical = "#b8232e"
+severity_high = "#d9622b"
+severity_medium = "#d9a521"
+severity_low = "#3a7d44"
+severity_info = "#4a6fa5"
+
+[[themes]]
+name = "Forest Perimeter"
+cover_art = "hexgrid"
+art_seed = 37
+[themes.palette]
+primary = "#1e3b2c"
+accent = "#48a86f"
+banner_start = "#0a1710"
+banner_end = "#2f6647"
+ink = "#20262b"
+muted = "#5c6b73"
+stripe = "#eef5f0"
+table_border = "#d5e3da"
+severity_critical = "#b8232e"
+severity_high = "#d9622b"
+severity_medium = "#d9a521"
+severity_low = "#3a7d44"
+severity_info = "#4a6fa5"
+
+[[themes]]
+name = "Steel Horizon"
+cover_art = "circuit"
+art_seed = 43
+[themes.palette]
+primary = "#24455c"
+accent = "#7fb2d9"
+banner_start = "#0e1c26"
+banner_end = "#3a6b8c"
+ink = "#20262b"
+muted = "#5c6b73"
+stripe = "#eff4f7"
+table_border = "#d7e2e9"
+severity_critical = "#b8232e"
+severity_high = "#d9622b"
+severity_medium = "#d9a521"
+severity_low = "#3a7d44"
+severity_info = "#4a6fa5"
+
+[[themes]]
+name = "Obsidian"
+cover_art = "binary"
+art_seed = 13
+[themes.palette]
+primary = "#1c1c22"
+accent = "#6ee7b7"
+banner_start = "#0a0a0d"
+banner_end = "#33333d"
+ink = "#20262b"
+muted = "#5c6b73"
+stripe = "#f0f1f3"
+table_border = "#dcdde3"
+severity_critical = "#b8232e"
+severity_high = "#d9622b"
+severity_medium = "#d9a521"
+severity_low = "#3a7d44"
+severity_info = "#4a6fa5"
+
+[[themes]]
+name = "Deep Space"
+cover_art = "network"
+art_seed = 61
+[themes.palette]
+primary = "#10182f"
+accent = "#8b9dff"
+banner_start = "#060a17"
+banner_end = "#22335f"
+ink = "#20262b"
+muted = "#5c6b73"
+stripe = "#eff1f8"
+table_border = "#d8dcea"
+severity_critical = "#b8232e"
+severity_high = "#d9622b"
+severity_medium = "#d9a521"
+severity_low = "#3a7d44"
+severity_info = "#4a6fa5"
+
+[[themes]]
+name = "Red Cell"
+cover_art = "binary"
+art_seed = 7
+[themes.palette]
+primary = "#331111"
+accent = "#ff5d49"
+banner_start = "#140505"
+banner_end = "#66221c"
+ink = "#20262b"
+muted = "#5c6b73"
+stripe = "#f8f0ef"
+table_border = "#e8d8d5"
+severity_critical = "#b8232e"
+severity_high = "#d9622b"
+severity_medium = "#d9a521"
+severity_low = "#3a7d44"
+severity_info = "#4a6fa5"
+
+[[themes]]
+name = "Blue Cell"
+cover_art = "radar"
+art_seed = 19
+[themes.palette]
+primary = "#102a43"
+accent = "#4098d7"
+banner_start = "#071624"
+banner_end = "#1f4d73"
+ink = "#20262b"
+muted = "#5c6b73"
+stripe = "#eef4f8"
+table_border = "#d5e2ec"
+severity_critical = "#b8232e"
+severity_high = "#d9622b"
+severity_medium = "#d9a521"
+severity_low = "#3a7d44"
+severity_info = "#4a6fa5"
+
+[[themes]]
+name = "Sandstone Brief"
+cover_art = "contours"
+art_seed = 47
+[themes.palette]
+primary = "#4f4234"
+accent = "#c9a227"
+banner_start = "#211b13"
+banner_end = "#7a6749"
+ink = "#20262b"
+muted = "#5c6b73"
+stripe = "#f6f3ec"
+table_border = "#e5decf"
+severity_critical = "#b8232e"
+severity_high = "#d9622b"
+severity_medium = "#d9a521"
+severity_low = "#3a7d44"
+severity_info = "#4a6fa5"
+
+[[themes]]
+name = "Canberra Navy"
+cover_art = "hexgrid"
+art_seed = 67
+[themes.palette]
+primary = "#0f2440"
+accent = "#2f7ed9"
+banner_start = "#060e1a"
+banner_end = "#1a3d6b"
+ink = "#20262b"
+muted = "#5c6b73"
+stripe = "#eef2f8"
+table_border = "#d6dfeb"
+severity_critical = "#b8232e"
+severity_high = "#d9622b"
+severity_medium = "#d9a521"
+severity_low = "#3a7d44"
+severity_info = "#4a6fa5"

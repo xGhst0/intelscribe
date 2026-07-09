@@ -1,0 +1,8 @@
+/target
+**/*.rs.bk
+.DS_Store
+# Raw upstream data (large); regenerate packs with:
+#   cargo run -p intelscribe-core --example build_packs
+/packs/raw/
+# Tauri build-time generated schemas
+/crates/app/gen/

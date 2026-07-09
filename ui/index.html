@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>IntelScribe</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="app">
+    <aside id="editor">
+      <header class="brand">
+        <h1>IntelScribe</h1>
+        <span class="tag">M2</span>
+      </header>
+      <div class="toolbar">
+        <select id="theme-select" title="Theme"></select>
+        <select id="art-select" title="Cover art"></select>
+        <button id="btn-new" type="button">New</button>
+        <button id="btn-export" type="button" class="primary">Export PDF</button>
+      </div>
+      <div id="form"></div>
+    </aside>
+    <main id="preview-pane">
+      <div id="status" class="status">Starting…</div>
+      <div id="pages"></div>
+    </main>
+  </div>
+  <datalist id="tech-list"></datalist>
+  <datalist id="ism-list"></datalist>
+  <script src="app.js"></script>
+</body>
+</html>

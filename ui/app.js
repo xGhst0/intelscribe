@@ -1,0 +1,570 @@
+"use strict";
+
+/* ---------- Tauri bridge (with browser-preview fallback) ---------- */
+
+const tauriCore = window.__TAURI__ && window.__TAURI__.core;
+
+async function invoke(cmd, args) {
+  if (tauriCore) return tauriCore.invoke(cmd, args);
+  return mockInvoke(cmd, args);
+}
+
+function mockInvoke(cmd) {
+  switch (cmd) {
+    case "list_themes":
+      return [
+        { name: "Harbour Teal", primary: "#0b3c49", accent: "#14b8c9" },
+        { name: "Midnight Slate", primary: "#1e2a3a", accent: "#5b8def" },
+        { name: "Ember", primary: "#2b2b2e", accent: "#e2452d" },
+      ];
+    case "list_art_styles":
+      return ["hexgrid", "circuit", "network", "radar", "binary", "contours", "none"];
+    case "pack_info":
+      return { attack_version: "—", ism_version: "—", technique_count: 0 };
+    case "search_techniques":
+    case "search_ism":
+      return [];
+    default:
+      throw "This action needs the IntelScribe desktop app — run: cargo run -p intelscribe-app";
+  }
+}
+
+/* ---------- Constants ---------- */
+
+const SEVERITIES = ["Critical", "High", "Medium", "Low", "Informational"];
+
+const PHASES = [
+  ["Reconnaissance", "Reconnaissance"],
+  ["InitialCompromise", "Initial Compromise"],
+  ["CommandAndControl", "C2 Communications"],
+  ["Enumeration", "Enumeration"],
+  ["LateralMovement", "Lateral Movement"],
+  ["DataAccess", "Data Access & Exfiltration"],
+  ["MalwareActivity", "Malware Deployment & Activity"],
+  ["Containment", "Containment"],
+  ["Eradication", "Eradication"],
+  ["Recovery", "Recovery"],
+];
+
+const IOC_TYPES = [
+  "IPv4 (C2)", "IPv4", "Domain", "URL", "Filename", "File Path", "Hash",
+  "Command Line", "Registry Key", "Named Pipe", "Named-Pipe Pattern",
+  "Windows Service", "Scheduled Task", "Email Address", "Other",
+];
+
+/* ---------- State ---------- */
+
+function defaultIncident() {
+  return {
+    incident_id: "", title: "", severity: "Medium", status: "In Progress",
+    overview: "", key_findings: [], immediate_actions: [],
+    stakeholder_impact: "", root_cause: "",
+    hosts: [], accounts: [], detections: [], iocs: [], events: [], techniques: [],
+    additional_recommendations: [], ism_controls: [], cvss_vector: "",
+  };
+}
+
+function defaultEngagement() {
+  const date = new Date().toLocaleDateString("en-AU", {
+    day: "numeric", month: "long", year: "numeric",
+  });
+  return {
+    title: "Security Incident Report",
+    client: "", analyst: "", analyst_title: "Security Analyst",
+    date, version: "1.0", classification: "OFFICIAL: Sensitive",
+    incidents: [defaultIncident()],
+  };
+}
+
+let state = defaultEngagement();
+
+/* ---------- DOM helpers ---------- */
+
+const $ = (sel) => document.querySelector(sel);
+
+function el(tag, attrs = {}, ...children) {
+  const node = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "class") node.className = v;
+    else if (k.startsWith("on")) node.addEventListener(k.slice(2), v);
+    else node.setAttribute(k, v);
+  }
+  node.append(...children);
+  return node;
+}
+
+function wrapField(label, input) {
+  return el("div", { class: "field" }, el("label", {}, label), input);
+}
+
+function field(obj, key, label, kind = "text", options = null) {
+  let input;
+  if (kind === "textarea") {
+    input = el("textarea");
+    input.value = obj[key] || "";
+  } else if (kind === "select") {
+    input = el("select");
+    for (const opt of options) {
+      const [value, text] = Array.isArray(opt) ? opt : [opt, opt];
+      input.append(el("option", { value }, text));
+    }
+    input.value = obj[key] || options[0][0] || options[0];
+  } else {
+    input = el("input", { type: "text" });
+    input.value = obj[key] || "";
+  }
+  input.addEventListener("input", () => { obj[key] = input.value; schedule(); });
+  return wrapField(label, input);
+}
+
+function row(...fields) {
+  return el("div", { class: "row" }, ...fields);
+}
+
+/* Generic editable list of objects. */
+function itemList(arr, buildFields, factory, addLabel) {
+  const wrap = el("div");
+  const listBox = el("div");
+  function renderList() {
+    listBox.innerHTML = "";
+    arr.forEach((item, idx) => {
+      const box = el("div", { class: "item" });
+      box.append(el("button", {
+        class: "remove", type: "button", title: "Remove",
+        onclick: () => { arr.splice(idx, 1); renderList(); schedule(); },
+      }, "✕"));
+      buildFields(box, item);
+      listBox.append(box);
+    });
+  }
+  renderList();
+  wrap.append(listBox, el("button", {
+    class: "add", type: "button",
+    onclick: () => { arr.push(factory()); renderList(); schedule(); },
+  }, addLabel));
+  return wrap;
+}
+
+/* Editable list of plain strings (findings, actions). */
+function stringList(arr, addLabel) {
+  const wrap = el("div");
+  const listBox = el("div");
+  function renderList() {
+    listBox.innerHTML = "";
+    arr.forEach((_, idx) => {
+      const box = el("div", { class: "item" });
+      box.append(el("button", {
+        class: "remove", type: "button", title: "Remove",
+        onclick: () => { arr.splice(idx, 1); renderList(); schedule(); },
+      }, "✕"));
+      const input = el("textarea");
+      input.value = arr[idx] || "";
+      input.addEventListener("input", () => { arr[idx] = input.value; schedule(); });
+      box.append(el("div", { class: "field" }, input));
+      listBox.append(box);
+    });
+  }
+  renderList();
+  wrap.append(listBox, el("button", {
+    class: "add", type: "button",
+    onclick: () => { arr.push(""); renderList(); schedule(); },
+  }, addLabel));
+  return wrap;
+}
+
+function section(title, open, ...content) {
+  const d = el("details", { class: "section" });
+  if (open) d.setAttribute("open", "");
+  d.append(el("summary", {}, title), el("div", { class: "section-body" }, ...content));
+  return d;
+}
+
+/* ---------- Technique autocomplete ---------- */
+
+async function refreshTechList(query) {
+  try {
+    const matches = await invoke("search_techniques", { query: query || "" });
+    const list = $("#tech-list");
+    list.innerHTML = "";
+    for (const m of matches) {
+      list.append(el("option", { value: m.id }, `${m.name} (${m.tactic})`));
+    }
+  } catch (_) { /* non-fatal */ }
+}
+
+/* ---------- CVSS 3.1 builder ---------- */
+
+const CVSS_METRICS = [
+  ["AV", "Attack Vector", [["N", "Network"], ["A", "Adjacent"], ["L", "Local"], ["P", "Physical"]]],
+  ["AC", "Attack Complexity", [["L", "Low"], ["H", "High"]]],
+  ["PR", "Privileges Required", [["N", "None"], ["L", "Low"], ["H", "High"]]],
+  ["UI", "User Interaction", [["N", "None"], ["R", "Required"]]],
+  ["S", "Scope", [["U", "Unchanged"], ["C", "Changed"]]],
+  ["C", "Confidentiality", [["H", "High"], ["L", "Low"], ["N", "None"]]],
+  ["I", "Integrity", [["H", "High"], ["L", "Low"], ["N", "None"]]],
+  ["A", "Availability", [["H", "High"], ["L", "Low"], ["N", "None"]]],
+];
+
+function parseCvss(vector) {
+  const map = {};
+  for (const part of (vector || "").split("/")) {
+    const [k, v] = part.split(":");
+    if (k && v && k.toUpperCase() !== "CVSS") map[k.toUpperCase()] = v.toUpperCase();
+  }
+  return map;
+}
+
+function cvssBuilder(inc) {
+  const wrap = el("div");
+  const scoreBadge = el("span", { class: "cvss-score" }, "—");
+
+  async function recompute() {
+    const parts = CVSS_METRICS.map(([k]) => `${k}:${selects[k].value}`);
+    inc.cvss_vector = "CVSS:3.1/" + parts.join("/");
+    schedule();
+    try {
+      const res = await invoke("score_cvss", { vector: inc.cvss_vector });
+      scoreBadge.textContent = `${res.score} ${res.rating}`;
+      scoreBadge.className = "cvss-score sev-" + res.rating.toLowerCase();
+    } catch (err) {
+      scoreBadge.textContent = "invalid";
+      scoreBadge.className = "cvss-score";
+    }
+  }
+
+  const existing = parseCvss(inc.cvss_vector);
+  const selects = {};
+  const grid = el("div", { class: "cvss-grid" });
+  for (const [key, label, opts] of CVSS_METRICS) {
+    const sel = el("select");
+    for (const [v, text] of opts) sel.append(el("option", { value: v }, text));
+    sel.value = existing[key] || opts[0][0];
+    sel.addEventListener("change", recompute);
+    selects[key] = sel;
+    grid.append(wrapField(label + " (" + key + ")", sel));
+  }
+
+  const header = el("div", { class: "cvss-header" },
+    el("span", {}, "CVSS 3.1 base score"), scoreBadge);
+  const clearBtn = el("button", {
+    class: "add", type: "button",
+    onclick: () => { inc.cvss_vector = ""; scoreBadge.textContent = "—"; scoreBadge.className = "cvss-score"; schedule(); },
+  }, "Clear CVSS (omit from report)");
+
+  wrap.append(header, grid, clearBtn);
+  if (inc.cvss_vector) recompute();
+  return wrap;
+}
+
+/* ---------- ISM control autocomplete ---------- */
+
+async function refreshIsmList(query) {
+  try {
+    const matches = await invoke("search_ism", { query: query || "" });
+    const list = $("#ism-list");
+    list.innerHTML = "";
+    for (const c of matches) {
+      list.append(el("option", { value: c.id }, `${c.id} — ${c.topic}`));
+    }
+  } catch (_) { /* non-fatal */ }
+}
+
+/* Editable list of ISM control ids (array of strings) with autocomplete
+   and a live preview of the resolved control text. */
+function ismList(arr) {
+  const wrap = el("div");
+  const listBox = el("div");
+  function renderList() {
+    listBox.innerHTML = "";
+    arr.forEach((_, idx) => {
+      const box = el("div", { class: "item" });
+      box.append(el("button", {
+        class: "remove", type: "button", title: "Remove",
+        onclick: () => { arr.splice(idx, 1); renderList(); schedule(); },
+      }, "✕"));
+      const input = el("input", { type: "text", list: "ism-list", placeholder: "ISM-1490" });
+      input.value = arr[idx] || "";
+      const preview = el("div", { class: "ism-preview" });
+      async function updatePreview() {
+        const matches = await invoke("search_ism", { query: input.value }).catch(() => []);
+        const hit = matches.find((c) => c.id.toLowerCase() === input.value.trim().toLowerCase());
+        preview.textContent = hit ? hit.text : "";
+      }
+      input.addEventListener("input", () => {
+        arr[idx] = input.value.trim().toUpperCase();
+        schedule();
+        refreshIsmList(input.value);
+        updatePreview();
+      });
+      box.append(el("div", { class: "field" }, input), preview);
+      if (input.value) updatePreview();
+      listBox.append(box);
+    });
+  }
+  renderList();
+  wrap.append(listBox, el("button", {
+    class: "add", type: "button",
+    onclick: () => { arr.push(""); renderList(); schedule(); },
+  }, "+ Add ISM control"));
+  return wrap;
+}
+
+function techniqueFields(box, t) {
+  const idInput = el("input", { type: "text", list: "tech-list", placeholder: "T1566.001" });
+  idInput.value = t.id || "";
+  const nameInput = el("input", { type: "text" });
+  nameInput.value = t.name || "";
+  const tacticInput = el("input", { type: "text" });
+  tacticInput.value = t.tactic || "";
+
+  idInput.addEventListener("input", async () => {
+    t.id = idInput.value;
+    schedule();
+    refreshTechList(idInput.value);
+    try {
+      const matches = await invoke("search_techniques", { query: idInput.value });
+      const hit = matches.find((m) => m.id.toLowerCase() === idInput.value.trim().toLowerCase());
+      if (hit) {
+        t.name = hit.name;
+        t.tactic = hit.tactic;
+        nameInput.value = hit.name;
+        tacticInput.value = hit.tactic;
+        schedule();
+      }
+    } catch (_) { /* offline pack lookup is best-effort */ }
+  });
+  nameInput.addEventListener("input", () => { t.name = nameInput.value; schedule(); });
+  tacticInput.addEventListener("input", () => { t.tactic = tacticInput.value; schedule(); });
+
+  box.append(
+    row(wrapField("Technique ID", idInput), wrapField("Tactic", tacticInput)),
+    wrapField("Name", nameInput),
+  );
+}
+
+/* ---------- Form ---------- */
+
+async function autoDraft(inc) {
+  try {
+    const draft = await invoke("draft_summary", { incident: inc });
+    const filled = [];
+    if (!inc.overview.trim()) { inc.overview = draft.overview; filled.push("overview"); }
+    if (!inc.key_findings.length) { inc.key_findings = draft.key_findings; filled.push("key findings"); }
+    if (!inc.stakeholder_impact.trim()) {
+      inc.stakeholder_impact = draft.stakeholder_impact;
+      filled.push("stakeholder impact");
+    }
+    if (filled.length) {
+      rebuild();
+      schedule();
+      setStatus("Auto-drafted: " + filled.join(", ") + ". Review and edit — it's your report.");
+    } else {
+      setStatus("Nothing to draft — overview, key findings and stakeholder impact already have content.");
+    }
+  } catch (err) {
+    setStatus(String(err), true);
+  }
+}
+
+function incidentSection(inc, idx) {
+  const label = `Incident ${idx + 1}${inc.title ? " — " + inc.title : ""}`;
+  return section(label, idx === 0,
+    el("button", {
+      class: "add", type: "button",
+      onclick: () => autoDraft(inc),
+    }, "✨ Auto-draft exec summary from the data below"),
+    field(inc, "title", "Incident title"),
+    row(
+      field(inc, "incident_id", "Incident ID"),
+      field(inc, "status", "Status"),
+    ),
+    field(inc, "severity", "Severity", "select", SEVERITIES),
+    field(inc, "overview", "Incident overview", "textarea"),
+    field(inc, "stakeholder_impact", "Stakeholder impact", "textarea"),
+    field(inc, "root_cause", "Root cause analysis", "textarea"),
+
+    section("Key findings", false, stringList(inc.key_findings, "+ Add finding")),
+    section("Immediate actions", false, stringList(inc.immediate_actions, "+ Add action")),
+
+    section("Affected hosts", false, itemList(inc.hosts, (box, h) => {
+      box.append(
+        row(field(h, "name", "Host name"), field(h, "ip", "IP / network")),
+        field(h, "description", "What happened on this host", "textarea"),
+      );
+    }, () => ({ name: "", ip: "", description: "" }), "+ Add host")),
+
+    section("Affected accounts", false, itemList(inc.accounts, (box, a) => {
+      box.append(
+        field(a, "name", "Account"),
+        field(a, "description", "Exposure / role in the incident"),
+      );
+    }, () => ({ name: "", description: "" }), "+ Add account")),
+
+    section("Detections", false, itemList(inc.detections, (box, d) => {
+      box.append(
+        field(d, "title", "Detection title"),
+        field(d, "data_source", "Data source"),
+        field(d, "query", "SIEM query / tool command", "textarea"),
+        field(d, "result", "Result", "textarea"),
+      );
+    }, () => ({ title: "", data_source: "", query: "", result: "" }), "+ Add detection")),
+
+    section("Indicators of compromise", false, itemList(inc.iocs, (box, ioc) => {
+      box.append(
+        field(ioc, "indicator", "Indicator"),
+        row(
+          field(ioc, "ioc_type", "Type", "select", IOC_TYPES),
+          field(ioc, "context", "Context"),
+        ),
+      );
+    }, () => ({ indicator: "", ioc_type: "IPv4", context: "" }), "+ Add IoC")),
+
+    section("Timeline events", false, itemList(inc.events, (box, ev) => {
+      box.append(
+        row(
+          field(ev, "timestamp", "Time (sortable, e.g. 03:38:10)"),
+          field(ev, "host", "Host"),
+        ),
+        field(ev, "phase", "Kill-chain phase", "select", PHASES),
+        field(ev, "description", "Activity", "textarea"),
+      );
+    }, () => ({ timestamp: "", phase: "Reconnaissance", host: "", description: "" }), "+ Add event")),
+
+    section("MITRE ATT&CK techniques", false, itemList(
+      inc.techniques, techniqueFields,
+      () => ({ id: "", name: "", tactic: "" }), "+ Add technique",
+    )),
+
+    section("Analyst recommendations", false,
+      stringList(inc.additional_recommendations, "+ Add recommendation")),
+
+    section("CVSS 3.1 severity", false, cvssBuilder(inc)),
+
+    section("ISM controls (quoted verbatim)", false, ismList(inc.ism_controls)),
+  );
+}
+
+function rebuild() {
+  const form = $("#form");
+  form.innerHTML = "";
+  form.append(
+    section("Engagement", true,
+      field(state, "title", "Report title"),
+      field(state, "client", "Client / organisation"),
+      row(
+        field(state, "analyst", "Analyst"),
+        field(state, "analyst_title", "Analyst title"),
+      ),
+      row(
+        field(state, "date", "Date"),
+        field(state, "version", "Version"),
+      ),
+      field(state, "classification", "Classification marking"),
+    ),
+  );
+  state.incidents.forEach((inc, idx) => form.append(incidentSection(inc, idx)));
+  form.append(el("button", {
+    class: "add", type: "button",
+    onclick: () => { state.incidents.push(defaultIncident()); rebuild(); schedule(); },
+  }, "+ Add incident"));
+}
+
+/* ---------- Preview ---------- */
+
+let renderSeq = 0;
+let timer = null;
+
+function setStatus(text, isError = false) {
+  const s = $("#status");
+  s.textContent = text;
+  s.className = "status" + (isError ? " error" : "");
+}
+
+function schedule() {
+  clearTimeout(timer);
+  timer = setTimeout(renderPreview, 500);
+}
+
+async function renderPreview() {
+  const seq = ++renderSeq;
+  setStatus("Rendering…");
+  try {
+    const res = await invoke("render_preview", {
+      engagement: state,
+      theme_name: $("#theme-select").value,
+      art_style: $("#art-select").value || "auto",
+    });
+    if (seq !== renderSeq) return;
+    const pages = $("#pages");
+    pages.innerHTML = "";
+    for (const b64 of res.pages) {
+      const img = new Image();
+      img.src = "data:image/png;base64," + b64;
+      pages.append(img);
+    }
+    if (res.warnings && res.warnings.length) {
+      setStatus("⚠ " + res.warnings.join("\n"));
+    } else {
+      setStatus(`Up to date — ${res.pages.length} page${res.pages.length === 1 ? "" : "s"}`);
+    }
+  } catch (err) {
+    if (seq === renderSeq) setStatus(String(err), true);
+  }
+}
+
+/* ---------- Init ---------- */
+
+async function init() {
+  const themeSelect = $("#theme-select");
+  try {
+    const themes = await invoke("list_themes");
+    themeSelect.innerHTML = "";
+    for (const t of themes) themeSelect.append(el("option", { value: t.name }, t.name));
+  } catch (_) { /* keep empty select */ }
+  themeSelect.addEventListener("change", schedule);
+
+  const artSelect = $("#art-select");
+  artSelect.append(el("option", { value: "auto" }, "Cover art: theme default"));
+  try {
+    const styles = await invoke("list_art_styles");
+    for (const style of styles) {
+      artSelect.append(el("option", { value: style }, "Cover art: " + style));
+    }
+  } catch (_) { /* keep default option */ }
+  artSelect.addEventListener("change", schedule);
+
+  $("#btn-new").addEventListener("click", () => {
+    if (!confirm("Start a new, empty report? Unsaved changes will be lost.")) return;
+    state = defaultEngagement();
+    rebuild();
+    renderPreview();
+  });
+
+  $("#btn-export").addEventListener("click", async () => {
+    setStatus("Exporting PDF…");
+    try {
+      const path = await invoke("export_pdf", {
+        engagement: state,
+        theme_name: themeSelect.value,
+        art_style: $("#art-select").value || "auto",
+      });
+      setStatus("Saved: " + path);
+    } catch (err) {
+      setStatus(String(err), true);
+    }
+  });
+
+  try {
+    const info = await invoke("pack_info");
+    if (info.technique_count > 0) {
+      setStatus(`Knowledge packs loaded — MITRE ATT&CK v${info.attack_version} (${info.technique_count} techniques), ACSC ISM ${info.ism_version}.`);
+    }
+  } catch (_) { /* non-fatal */ }
+
+  refreshTechList("");
+  refreshIsmList("");
+  rebuild();
+  renderPreview();
+}
+
+init();

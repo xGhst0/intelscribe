@@ -1,0 +1,221 @@
+[
+  {
+    "technique": "T1566",
+    "controls": [
+      { "name": "User training and phishing simulation program", "reference": "ATT&CK M1017" },
+      { "name": "Email filtering with attachment sandboxing and link rewriting", "reference": "ATT&CK M1049 / M1021" },
+      { "name": "Block macros from internet-sourced documents", "reference": "ATT&CK M1042" }
+    ],
+    "essential_eight": ["Configure Microsoft Office macro settings", "User application hardening"]
+  },
+  {
+    "technique": "T1204",
+    "controls": [
+      { "name": "Application control to prevent execution of untrusted payloads", "reference": "ATT&CK M1038" },
+      { "name": "Show file extensions and warn on executable content", "reference": "ATT&CK M1017" }
+    ],
+    "essential_eight": ["Application control", "User application hardening"]
+  },
+  {
+    "technique": "T1059",
+    "controls": [
+      { "name": "PowerShell Constrained Language Mode and script block logging", "reference": "ATT&CK M1038 / M1042" },
+      { "name": "Execution prevention for unsigned scripts (WDAC/AppLocker)", "reference": "ATT&CK M1038" },
+      { "name": "Disable or restrict legacy script engines where not required", "reference": "ATT&CK M1042" }
+    ],
+    "essential_eight": ["Application control", "Restrict administrative privileges"]
+  },
+  {
+    "technique": "T1047",
+    "controls": [
+      { "name": "Restrict WMI remote access to administrative subnets", "reference": "ATT&CK M1035" },
+      { "name": "Privileged account management for remote execution rights", "reference": "ATT&CK M1026" }
+    ],
+    "essential_eight": ["Restrict administrative privileges"]
+  },
+  {
+    "technique": "T1071",
+    "controls": [
+      { "name": "Egress filtering with TLS/HTTP inspection at the perimeter", "reference": "ATT&CK M1037" },
+      { "name": "Network intrusion prevention with C2 signature coverage", "reference": "ATT&CK M1031" }
+    ],
+    "essential_eight": []
+  },
+  {
+    "technique": "T1105",
+    "controls": [
+      { "name": "Block download of executable content from uncategorised domains", "reference": "ATT&CK M1021" },
+      { "name": "Network intrusion prevention on ingress tool transfer signatures", "reference": "ATT&CK M1031" }
+    ],
+    "essential_eight": ["User application hardening"]
+  },
+  {
+    "technique": "T1033",
+    "controls": [
+      { "name": "Alert on discovery command chains (whoami, net, nltest) from user context", "reference": "ATT&CK M1047 (detection-led)" }
+    ],
+    "essential_eight": []
+  },
+  {
+    "technique": "T1087",
+    "controls": [
+      { "name": "Rate-limit and monitor LDAP queries; alert on bulk enumeration", "reference": "ATT&CK M1047 (detection-led)" },
+      { "name": "Harden Active Directory read permissions for standard users", "reference": "ATT&CK M1015" }
+    ],
+    "essential_eight": []
+  },
+  {
+    "technique": "T1069",
+    "controls": [
+      { "name": "Monitor group enumeration volume from workstations", "reference": "ATT&CK M1047 (detection-led)" }
+    ],
+    "essential_eight": []
+  },
+  {
+    "technique": "T1046",
+    "controls": [
+      { "name": "Internal network segmentation to limit scan reach", "reference": "ATT&CK M1030" },
+      { "name": "Host firewalls denying unsolicited internal management ports", "reference": "ATT&CK M1037" }
+    ],
+    "essential_eight": []
+  },
+  {
+    "technique": "T1055",
+    "controls": [
+      { "name": "Endpoint behaviour prevention for injection primitives (CreateRemoteThread)", "reference": "ATT&CK M1040" },
+      { "name": "Attack surface reduction rules blocking cross-process injection", "reference": "ATT&CK M1038" }
+    ],
+    "essential_eight": []
+  },
+  {
+    "technique": "T1548",
+    "controls": [
+      { "name": "Set UAC to Always Notify and deny silent elevation paths", "reference": "ATT&CK M1052" },
+      { "name": "Remove local administrator rights from standard users", "reference": "ATT&CK M1026" },
+      { "name": "Monitor ms-settings and other UAC-bypass registry keys", "reference": "ATT&CK M1024" }
+    ],
+    "essential_eight": ["Restrict administrative privileges"]
+  },
+  {
+    "technique": "T1036",
+    "controls": [
+      { "name": "Alert on system binary names executing from non-standard paths", "reference": "ATT&CK M1047 (detection-led)" },
+      { "name": "Require code signing for executables in user-writable paths", "reference": "ATT&CK M1045" }
+    ],
+    "essential_eight": ["Application control"]
+  },
+  {
+    "technique": "T1620",
+    "controls": [
+      { "name": "Endpoint memory-scanning / AMSI integration for reflective loads", "reference": "ATT&CK M1040" },
+      { "name": "Alert on processes loading the CLR without associated .NET images on disk", "reference": "ATT&CK M1047 (detection-led)" }
+    ],
+    "essential_eight": []
+  },
+  {
+    "technique": "T1558",
+    "controls": [
+      { "name": "Long, random passwords (25+ chars) or gMSA for all SPN accounts", "reference": "ATT&CK M1027" },
+      { "name": "Disable RC4 for Kerberos; enforce AES service tickets", "reference": "ATT&CK M1041" },
+      { "name": "Alert on RC4 (0x17) TGS requests and Kerberoasting volume", "reference": "ATT&CK M1047 (detection-led)" }
+    ],
+    "essential_eight": ["Restrict administrative privileges"]
+  },
+  {
+    "technique": "T1003",
+    "controls": [
+      { "name": "Enable Credential Guard and LSASS RunAsPPL on all hosts", "reference": "ATT&CK M1043" },
+      { "name": "Tiered administration so DC credentials never touch lower tiers", "reference": "ATT&CK M1026" },
+      { "name": "Alert on handles to lsass.exe with VM_READ from non-system processes", "reference": "ATT&CK M1047 (detection-led)" }
+    ],
+    "essential_eight": ["Restrict administrative privileges", "Patch operating systems"]
+  },
+  {
+    "technique": "T1078",
+    "controls": [
+      { "name": "Multi-factor authentication for all remote and privileged access", "reference": "ATT&CK M1032" },
+      { "name": "Anomalous logon detection (new source host, impossible travel)", "reference": "ATT&CK M1047 (detection-led)" }
+    ],
+    "essential_eight": ["Multi-factor authentication"]
+  },
+  {
+    "technique": "T1021",
+    "controls": [
+      { "name": "Network segmentation; block workstation-to-workstation SMB/RDP/WinRM", "reference": "ATT&CK M1030" },
+      { "name": "Disable ADMIN$ remote execution paths where not operationally required", "reference": "ATT&CK M1035" },
+      { "name": "Multi-factor authentication for remote sessions", "reference": "ATT&CK M1032" }
+    ],
+    "essential_eight": ["Restrict administrative privileges", "Multi-factor authentication"]
+  },
+  {
+    "technique": "T1550",
+    "controls": [
+      { "name": "Double KRBTGT reset after credential exposure; short ticket lifetimes", "reference": "ATT&CK M1015" },
+      { "name": "Detect Kerberos logons for accounts absent from the preceding auth chain", "reference": "ATT&CK M1047 (detection-led)" }
+    ],
+    "essential_eight": ["Multi-factor authentication"]
+  },
+  {
+    "technique": "T1570",
+    "controls": [
+      { "name": "Block lateral file staging to ADMIN$/C$ shares from non-admin hosts", "reference": "ATT&CK M1035" }
+    ],
+    "essential_eight": []
+  },
+  {
+    "technique": "T1569",
+    "controls": [
+      { "name": "Alert on transient service installs (PSEXESVC and random-name binaries)", "reference": "ATT&CK M1047 (detection-led)" },
+      { "name": "Restrict service creation rights to dedicated administrative accounts", "reference": "ATT&CK M1026" }
+    ],
+    "essential_eight": ["Restrict administrative privileges"]
+  },
+  {
+    "technique": "T1053",
+    "controls": [
+      { "name": "Audit scheduled-task creation; alert on tasks registered by SYSTEM outside change windows", "reference": "ATT&CK M1047 (detection-led)" },
+      { "name": "Restrict task creation via GPO to administrative accounts", "reference": "ATT&CK M1026" }
+    ],
+    "essential_eight": ["Restrict administrative privileges"]
+  },
+  {
+    "technique": "T1547",
+    "controls": [
+      { "name": "Monitor Run/RunOnce key writes and autostart changes", "reference": "ATT&CK M1047 (detection-led)" },
+      { "name": "Application control preventing autostart of unsigned binaries", "reference": "ATT&CK M1038" }
+    ],
+    "essential_eight": ["Application control"]
+  },
+  {
+    "technique": "T1543",
+    "controls": [
+      { "name": "Alert on Event ID 7045 service installs referencing user-writable paths", "reference": "ATT&CK M1047 (detection-led)" },
+      { "name": "Require signed binaries for service images", "reference": "ATT&CK M1045" }
+    ],
+    "essential_eight": ["Application control", "Restrict administrative privileges"]
+  },
+  {
+    "technique": "T1136",
+    "controls": [
+      { "name": "Alert on account creation (EID 4720) on domain controllers and servers", "reference": "ATT&CK M1047 (detection-led)" },
+      { "name": "Multi-party approval workflow for privileged account creation", "reference": "ATT&CK M1026" }
+    ],
+    "essential_eight": ["Restrict administrative privileges"]
+  },
+  {
+    "technique": "T1098",
+    "controls": [
+      { "name": "Monitor SPN registrations and directory permission changes", "reference": "ATT&CK M1047 (detection-led)" },
+      { "name": "Harden AD ACLs; review AdminSDHolder and delegation regularly", "reference": "ATT&CK M1015" }
+    ],
+    "essential_eight": ["Restrict administrative privileges"]
+  },
+  {
+    "technique": "T1041",
+    "controls": [
+      { "name": "Egress volume anomaly detection per host and destination", "reference": "ATT&CK M1057-adjacent (DLP) / M1037" },
+      { "name": "Block direct-to-IP outbound traffic from user segments", "reference": "ATT&CK M1037" }
+    ],
+    "essential_eight": []
+  }
+]

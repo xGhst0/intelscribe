@@ -1,0 +1,113 @@
+{
+  "_comment": "Fully fictional test fixture. All identifiers are invented; IP addresses use the RFC 5737 documentation ranges (192.0.2.0/24, 198.51.100.0/24, 203.0.113.0/24). Not derived from any real or training engagement.",
+  "title": "Security Incident Report",
+  "client": "Aurora Logistics Pty Ltd",
+  "analyst": "J. Rivera",
+  "analyst_title": "Senior SOC Analyst",
+  "date": "14 March 2026",
+  "version": "1.0",
+  "classification": "OFFICIAL: Sensitive",
+  "incidents": [
+    {
+      "incident_id": "a1b2c3d4-0000-4a5b-9c8d-112233445566",
+      "title": "Phishing-Initiated Domain Compromise",
+      "severity": "Critical",
+      "status": "Contained",
+      "overview": "On 14 March 2026, a phishing email delivered a macro-enabled document (purchase-order.doc) to the user amina.khan on the aurora.internal network. Opening the attachment executed a hidden PowerShell download cradle that retrieved a stager from the command-and-control server 203.0.113.47, establishing a foothold on the workstation WKS-041. The adversary conducted Active Directory reconnaissance, escalated privileges via a UAC bypass, Kerberoasted the svc_reporting service account, moved laterally to the application server APP-02 and ultimately to the domain controller DC-01, where credentials were dumped from LSASS memory.",
+      "key_findings": [
+        "Initial access via a macro-enabled phishing document (purchase-order.doc) spawning a hidden PowerShell cradle beaconing to 203.0.113.47.",
+        "Active Directory reconnaissance performed with an LDAP collector and whoami discovery.",
+        "Privilege escalation through process injection and a UAC bypass.",
+        "Credential access via Kerberoasting of the svc_reporting account and LSASS memory dumping on DC-01.",
+        "Lateral movement over SMB to APP-02 and DC-01 using valid stolen credentials."
+      ],
+      "immediate_actions": [
+        "Isolated the affected hosts (WKS-041, APP-02, DC-01) from the network and preserved memory and disk images.",
+        "Blocked outbound communication to the C2 address 203.0.113.47 at the perimeter.",
+        "Forced a domain-wide credential reset and a double reset of the KRBTGT account.",
+        "Flagged the svc_reporting account and the persistence mechanisms for removal."
+      ],
+      "stakeholder_impact": "Credentials were extracted directly from the domain controller, so the entire aurora.internal domain must be treated as compromised; every account, including privileged and service accounts, is potentially exposed. This carries severe confidentiality and integrity impact and elevated availability risk from durable attacker persistence. Stakeholders should anticipate significant remediation effort and should assess breach-notification obligations.",
+      "root_cause": "The incident's root cause was a successful spear-phishing email that delivered a macro-enabled document to a workstation that allowed the embedded macro to execute. The compromise escalated from a single workstation to the domain through a chain of avoidable control failures: a viable UAC bypass, a weak Kerberoastable service account permitted to use RC4, a flat internal network with no segmentation, and unprotected LSASS on the domain controller. The failure was one of prevention rather than visibility; the telemetry needed to reconstruct the attack was present but was neither blocked nor alerted upon.",
+      "hosts": [
+        { "name": "WKS-041", "ip": "192.0.2.41", "description": "Initial-access workstation. Phishing attachment opened here; early kill chain observed including reconnaissance, process injection, UAC bypass, Kerberoasting, and scheduled-task persistence." },
+        { "name": "APP-02", "ip": "192.0.2.52", "description": "Application server reached by lateral movement over SMB. Post-compromise activity included in-memory tooling and a subnet scan that located the domain controller." },
+        { "name": "DC-01", "ip": "192.0.2.10", "description": "Domain controller. Accessed with stolen credentials; service persistence installed and credentials dumped from LSASS memory. Compromise extends to the entire aurora.internal domain." }
+      ],
+      "accounts": [
+        { "name": "amina.khan", "description": "Initial phishing victim; user context and workstation compromised." },
+        { "name": "svc_reporting", "description": "Service account Kerberoasted and cracked; used to move laterally." },
+        { "name": "All domain accounts", "description": "Must be presumed compromised following LSASS credential dumping on the domain controller." }
+      ],
+      "detections": [
+        {
+          "title": "Initial execution — malicious macro spawns PowerShell",
+          "data_source": "Sysmon Event ID 1 (Process Creation)",
+          "query": "event.code:\"1\" and winlog.event_data.ParentImage:*WINWORD.EXE*",
+          "result": "WINWORD.EXE (opening purchase-order.doc) spawned a hidden PowerShell process with a download-cradle command line retrieving hxxp://203.0.113.47/update. This is the initial execution."
+        },
+        {
+          "title": "C2 beaconing from the download cradle",
+          "data_source": "Sysmon Event ID 3 (Network Connection)",
+          "query": "event.code:\"3\" and winlog.event_data.Image:*powershell*",
+          "result": "The cradle beaconed to C2 203.0.113.47 over port 443."
+        },
+        {
+          "title": "Kerberoasting of svc_reporting",
+          "data_source": "Windows Security Event ID 4769",
+          "query": "event.code:\"4769\" and winlog.event_data.TicketEncryptionType:\"0x17\"",
+          "result": "A single RC4 (0x17) service-ticket request for the SPN of svc_reporting — the Kerberoasting signature."
+        },
+        {
+          "title": "LSASS credential dumping on DC-01",
+          "data_source": "Sysmon Event ID 10 (ProcessAccess)",
+          "query": "event.code:\"10\" and host.name:*DC-01* and winlog.event_data.TargetImage:*lsass.exe*",
+          "result": "A masqueraded process opened lsass.exe with GrantedAccess 0x1010 (PROCESS_VM_READ + PROCESS_QUERY_LIMITED_INFORMATION), the credential-dumping signature."
+        }
+      ],
+      "iocs": [
+        { "indicator": "203.0.113.47", "ioc_type": "IPv4 (C2)", "context": "Command-and-control server; HTTPS beaconing on port 443" },
+        { "indicator": "hxxp://203.0.113.47/update", "ioc_type": "URL", "context": "Stager download URI invoked by the malicious macro" },
+        { "indicator": "purchase-order.doc", "ioc_type": "Filename", "context": "Malicious phishing document (macro dropper)" },
+        { "indicator": "C:\\Users\\amina.khan\\AppData\\Local\\collector.exe", "ioc_type": "File Path", "context": "Active Directory collection tool" },
+        { "indicator": "svc_reporting", "ioc_type": "Other", "context": "Kerberoasted service account used for lateral movement" }
+      ],
+      "events": [
+        { "timestamp": "09:12:04", "phase": "InitialCompromise", "host": "WKS-041", "description": "User opened purchase-order.doc; macro spawned hidden PowerShell — initial compromise." },
+        { "timestamp": "09:12:05", "phase": "CommandAndControl", "host": "WKS-041", "description": "Download cradle began beaconing to 203.0.113.47 over HTTPS port 443." },
+        { "timestamp": "09:13:20", "phase": "Enumeration", "host": "WKS-041", "description": "Attacker ran whoami /all to enumerate the compromised user's privileges." },
+        { "timestamp": "09:15:00", "phase": "Reconnaissance", "host": "WKS-041", "description": "LDAP-based Active Directory collection performed to map attack paths." },
+        { "timestamp": "09:18:41", "phase": "MalwareActivity", "host": "WKS-041", "description": "Shellcode injected into a benign process; UAC bypass via registry hijack." },
+        { "timestamp": "09:24:12", "phase": "DataAccess", "host": "WKS-041", "description": "Kerberoasting: RC4 service-ticket request for svc_reporting extracted for offline cracking." },
+        { "timestamp": "09:31:57", "phase": "LateralMovement", "host": "APP-02", "description": "Payload staged on the ADMIN$ share executed remotely using cracked svc_reporting credentials." },
+        { "timestamp": "09:38:03", "phase": "Enumeration", "host": "APP-02", "description": "Subnet scan across ports 88, 445 and 3389 located the domain controller DC-01." },
+        { "timestamp": "09:44:19", "phase": "LateralMovement", "host": "DC-01", "description": "Remote execution on DC-01 with stolen credentials completed movement to the domain controller." },
+        { "timestamp": "09:46:52", "phase": "DataAccess", "host": "DC-01", "description": "Credentials dumped from LSASS memory (0x1010 access)." }
+      ],
+      "techniques": [
+        { "id": "T1566.001", "name": "Phishing: Spearphishing Attachment", "tactic": "Initial Access" },
+        { "id": "T1204.002", "name": "User Execution: Malicious File", "tactic": "Execution" },
+        { "id": "T1059.001", "name": "Command and Scripting Interpreter: PowerShell", "tactic": "Execution" },
+        { "id": "T1071.001", "name": "Application Layer Protocol: Web Protocols", "tactic": "Command and Control" },
+        { "id": "T1033", "name": "System Owner/User Discovery", "tactic": "Discovery" },
+        { "id": "T1087.002", "name": "Account Discovery: Domain Account", "tactic": "Discovery" },
+        { "id": "T1046", "name": "Network Service Discovery", "tactic": "Discovery" },
+        { "id": "T1055", "name": "Process Injection", "tactic": "Privilege Escalation" },
+        { "id": "T1548.002", "name": "Abuse Elevation Control Mechanism: Bypass User Account Control", "tactic": "Privilege Escalation" },
+        { "id": "T1558.003", "name": "Steal or Forge Kerberos Tickets: Kerberoasting", "tactic": "Credential Access" },
+        { "id": "T1003.001", "name": "OS Credential Dumping: LSASS Memory", "tactic": "Credential Access" },
+        { "id": "T1021.002", "name": "Remote Services: SMB/Windows Admin Shares", "tactic": "Lateral Movement" },
+        { "id": "T1078", "name": "Valid Accounts", "tactic": "Defense Evasion" },
+        { "id": "T1053.005", "name": "Scheduled Task/Job: Scheduled Task", "tactic": "Persistence" }
+      ],
+      "additional_recommendations": [
+        "Deploy Credential Guard and LSASS RunAsPPL across all servers and workstations, prioritising domain controllers.",
+        "Implement tiered administration and network segmentation so workstation-to-server SMB, WinRM and RDP paths are denied by default.",
+        "Rotate service accounts to group Managed Service Accounts (gMSAs) and audit all SPN accounts for crackable passwords.",
+        "Uplift Essential Eight maturity for macro settings and application control to Maturity Level Two as a minimum."
+      ],
+      "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:H/I:H/A:H",
+      "ism_controls": ["ISM-1488", "ISM-1490", "ISM-1657", "ISM-0042"]
+    }
+  ]
+}

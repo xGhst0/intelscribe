@@ -1,0 +1,14 @@
+[package]
+name = "intelscribe-app"
+version.workspace = true
+edition.workspace = true
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+intelscribe-core = { path = "../core" }
+intelscribe-render = { path = "../render" }
+tauri = { version = "2", features = [] }
+serde = { workspace = true }
+serde_json = { workspace = true }

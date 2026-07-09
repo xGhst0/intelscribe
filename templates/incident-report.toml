@@ -1,0 +1,26 @@
+id = "incident-report"
+name = "Security Incident Report"
+
+# Boilerplate and analyst guidance for each section. {client} is substituted
+# at render time. Guidance strings print as small italic coaching text under
+# section headings, mirroring commercial report templates.
+
+confidentiality = """
+The contents of this document have been developed by {client}. {client} considers the contents of this document to be proprietary and business confidential information. This information is to be used only in the performance of its intended use. This document may not be released to another vendor, business partner or contractor without prior written consent from {client}. Additionally, no portion of this document may be communicated, reproduced, copied or distributed without the prior consent of {client}.
+"""
+
+affected_guidance = "Highlight all systems and data that were either potentially accessed or definitively compromised during the incident. If data was exfiltrated, specify the volume or quantity, if ascertainable."
+
+evidence_guidance = "Emphasise the evidence scrutinised, the results, and the analytical methodology employed. Each detection should be elucidated step by step, inclusive of the associated data sources, SIEM queries, and tool commands."
+
+ioc_guidance = "IoCs are instrumental for hunting potential compromises across the broader environment or among partner organisations. These can range from abnormal outbound traffic to unfamiliar processes and scheduled tasks initiated by the attacker."
+
+root_cause_guidance = "Detail the root cause analysis conducted and elaborate on the underlying cause of the security incident (vulnerabilities exploited, failure points, etc.)."
+
+timeline_guidance = "A pivotal component for comprehending the incident's sequence of events, presented in kill-chain order."
+
+nature_guidance = "Deep-dive into the type of attack, as well as the tactics, techniques, and procedures (TTPs) employed by the attacker, mapped to the MITRE ATT&CK framework."
+
+attack_map_guidance = "A visual summary of the intrusion: which kill-chain phases were observed, and how the adversary moved between hosts. Generated automatically from the technical timeline."
+
+recommendations_guidance = "Controls are derived automatically from the ATT&CK techniques observed in this incident, prioritised by how many observed techniques each control addresses. Analyst recommendations follow."
