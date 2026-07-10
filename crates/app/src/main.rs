@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 
 use intelscribe_core::autofill::{self, DraftSummary};
-use intelscribe_core::model::{Engagement, Host, Incident, Ioc, TimelineEvent};
+use intelscribe_core::model::{Detection, Engagement, Host, Incident, Ioc, TimelineEvent};
 use intelscribe_core::{extract, packs, template, theme};
 use serde::Serialize;
 
@@ -92,6 +92,11 @@ fn extract_events(text: String) -> Vec<TimelineEvent> {
 }
 
 #[tauri::command(rename_all = "snake_case")]
+fn extract_detections(text: String) -> Vec<Detection> {
+    extract::extract_detections(&text)
+}
+
+#[tauri::command(rename_all = "snake_case")]
 fn suggest_techniques(text: String) -> Vec<packs::Technique> {
     packs::suggest_techniques(&text)
 }
@@ -176,6 +181,7 @@ fn main() {
             extract_iocs,
             extract_hosts,
             extract_events,
+            extract_detections,
             suggest_techniques,
             lint_report,
             score_cvss,

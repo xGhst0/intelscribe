@@ -26,6 +26,7 @@ function mockInvoke(cmd) {
     case "extract_iocs":
     case "extract_hosts":
     case "extract_events":
+    case "extract_detections":
     case "suggest_techniques":
     case "lint_report":
       return [];
@@ -488,6 +489,16 @@ function mergeEvents(inc, incoming) {
   return added;
 }
 
+function mergeDetections(inc, incoming) {
+  let added = 0;
+  for (const d of incoming) {
+    const dup = inc.detections.some((x) =>
+      x.title.trim().toLowerCase() === d.title.trim().toLowerCase() && x.result === d.result);
+    if (!dup) { inc.detections.push(d); added++; }
+  }
+  return added;
+}
+
 /* Paste box: extract IoCs, hosts, timeline events and ATT&CK techniques from
    raw text — individually or all at once. */
 function quickImport(inc) {
@@ -514,19 +525,21 @@ function quickImport(inc) {
     if (!text()) { setStatus("Paste some text into the import box first."); return; }
     try {
       const t = text();
-      const [iocs, hosts, events, techs] = await Promise.all([
+      const [iocs, hosts, events, dets, techs] = await Promise.all([
         invoke("extract_iocs", { text: t }),
         invoke("extract_hosts", { text: t }),
         invoke("extract_events", { text: t }),
+        invoke("extract_detections", { text: t }),
         invoke("suggest_techniques", { text: t }),
       ]);
       const h = mergeHosts(inc, hosts);
       const ev = mergeEvents(inc, events);
+      const de = mergeDetections(inc, dets);
       const io = mergeIocs(inc, iocs);
       const te = mergeTechniques(inc, techs);
       rebuild();
       schedule();
-      setStatus(`Extracted — ${h} hosts, ${ev} timeline events, ${io} IoCs, ${te} techniques added (duplicates skipped). Review and prune.`);
+      setStatus(`Extracted — ${h} hosts, ${ev} timeline events, ${de} detections, ${io} IoCs, ${te} techniques added (duplicates skipped). Review and prune.`);
     } catch (err) {
       setStatus(String(err), true);
     }
@@ -544,7 +557,11 @@ function quickImport(inc) {
     ),
     el("div", { class: "row" },
       el("button", { class: "add", type: "button",
+        onclick: () => run("extract_detections", mergeDetections, "Detection extraction") }, "🔎 Detections"),
+      el("button", { class: "add", type: "button",
         onclick: () => run("extract_iocs", mergeIocs, "IoC extraction") }, "⬇ IoCs"),
+    ),
+    el("div", { class: "row" },
       el("button", { class: "add", type: "button",
         onclick: () => run("suggest_techniques", mergeTechniques, "ATT&CK suggestions") }, "✨ ATT&CK"),
     ),

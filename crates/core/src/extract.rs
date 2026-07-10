@@ -9,7 +9,7 @@ use std::sync::OnceLock;
 
 use regex::Regex;
 
-use crate::model::{Host, Ioc, Phase, TimelineEvent};
+use crate::model::{Detection, Host, Ioc, Phase, TimelineEvent};
 
 /// File extensions that should be treated as filenames, not domains, when they
 /// appear as a bare `name.ext` token.
@@ -434,6 +434,128 @@ pub fn extract_events(input: &str) -> Vec<TimelineEvent> {
     out
 }
 
+// ---------------------------------------------------------------------------
+// Structured detection extraction
+// ---------------------------------------------------------------------------
+
+#[derive(Clone, Copy, PartialEq)]
+enum Field {
+    None,
+    DataSource,
+    Query,
+    Result,
+}
+
+fn detection_header() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r"(?i)^\s*detection\s+\d+\s*[:\-\u{2013}\u{2014}]?\s*(.*)$").unwrap())
+}
+
+/// Classify a line as a labelled field. Splits on the first colon and matches
+/// the label; returns the field kind and any inline value after the colon.
+fn field_label(line: &str) -> Option<(Field, String)> {
+    let (left, right) = line.split_once(':')?;
+    let key = left.trim().to_ascii_lowercase();
+    let rest = right.trim().to_string();
+    if key == "data source" || key == "data sources" {
+        Some((Field::DataSource, rest))
+    } else if key == "result" || key == "results" {
+        Some((Field::Result, rest))
+    } else if key.starts_with("query") {
+        Some((Field::Query, rest))
+    } else if key.starts_with("tool command") {
+        Some((Field::Query, rest))
+    } else {
+        None
+    }
+}
+
+fn is_page_number(line: &str) -> bool {
+    let t = line.trim();
+    !t.is_empty() && t.len() <= 4 && t.chars().all(|c| c.is_ascii_digit())
+}
+
+/// Parse detection blocks structured as `Detection N: title / Data source: … /
+/// Query: … / Result: …` into `Detection` records. Tolerant of stray page
+/// numbers, blank lines, and multiple query segments per detection.
+pub fn extract_detections(input: &str) -> Vec<Detection> {
+    let mut out: Vec<Detection> = Vec::new();
+    let mut cur: Option<Detection> = None;
+    let mut field = Field::None;
+
+    let push_query = |d: &mut Detection, text: &str| {
+        if !text.trim().is_empty() {
+            if !d.query.is_empty() {
+                d.query.push('\n');
+            }
+            d.query.push_str(text.trim_end());
+        }
+    };
+    let append_prose = |s: &mut String, text: &str| {
+        let t = text.trim();
+        if t.is_empty() {
+            return;
+        }
+        if !s.is_empty() {
+            s.push(' ');
+        }
+        s.push_str(t);
+    };
+
+    for raw in input.lines() {
+        let line = raw.trim_end();
+        let trimmed = line.trim();
+
+        if let Some(caps) = detection_header().captures(trimmed) {
+            if let Some(d) = cur.take() {
+                out.push(d);
+            }
+            let mut d = Detection::default();
+            d.title = caps.get(1).map(|m| m.as_str().trim().to_string()).unwrap_or_default();
+            cur = Some(d);
+            field = Field::None;
+            continue;
+        }
+
+        let Some(d) = cur.as_mut() else { continue };
+
+        if trimmed.is_empty() || is_page_number(trimmed) {
+            continue;
+        }
+
+        if let Some((kind, rest)) = field_label(trimmed) {
+            field = kind;
+            match kind {
+                Field::DataSource => append_prose(&mut d.data_source, &rest),
+                Field::Result => append_prose(&mut d.result, &rest),
+                // A trailing sub-label like "Query: PsExec installs:" is skipped;
+                // an inline query is kept.
+                Field::Query => {
+                    if !rest.is_empty() && !rest.ends_with(':') {
+                        push_query(d, &rest);
+                    } else if !d.query.is_empty() {
+                        d.query.push('\n');
+                    }
+                }
+                Field::None => {}
+            }
+            continue;
+        }
+
+        // Continuation of the current field.
+        match field {
+            Field::DataSource => append_prose(&mut d.data_source, trimmed),
+            Field::Query => push_query(d, line.trim_start()),
+            Field::Result => append_prose(&mut d.result, trimmed),
+            Field::None => {}
+        }
+    }
+    if let Some(d) = cur.take() {
+        out.push(d);
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -487,6 +609,64 @@ mod tests {
         // The host must not also surface as a standalone Domain.
         assert!(indicators(&iocs, "Domain").is_empty());
         assert_eq!(indicators(&iocs, "URL").len(), 1);
+    }
+
+    #[test]
+    fn parses_structured_detections() {
+        // A slice of a real report paste, including PDF page-number artifacts.
+        let block = "\
+Detection 1: DCSync replication against the domain controller\n\
+Data source: Windows Security log, Event ID 4662 (Directory Service Access).\n\
+Query:\n\
+index=windows OR index=main EventCode=4662 (Message=\"*Replicating Directory Changes*\"\n\
+| table _time, host, Account_Name, Object_Name, Access_Mask, Properties\n\
+Result: The non-domain-controller account management performed Control Access on\n\
+27\n\
+11 September 2023. The management account's activity is the illegitimate DCSync.\n\
+Detection 2: DCSync tool and target (Invoke-Mimikatz)\n\
+Data source: Sysmon Event ID 1 (Process Creation).\n\
+Query:\n\
+index=windows sourcetype=\"wineventlog:sysmon\" EventCode=1 Image=\"*powershell*\"\n\
+| sort _time\n\
+Result: On WIN-HIDUIPTH344, PowerShell executed Invoke-Mimikatz targeting krbtgt.";
+        let dets = extract_detections(block);
+        assert_eq!(dets.len(), 2, "{dets:?}");
+        assert_eq!(dets[0].title, "DCSync replication against the domain controller");
+        assert!(dets[0].data_source.contains("Event ID 4662"));
+        assert!(dets[0].query.contains("EventCode=4662"));
+        assert!(dets[0].query.contains("| table"));
+        assert!(dets[0].result.contains("Control Access"));
+        assert!(dets[0].result.contains("11 September"));
+        // The stray page number must not pollute the result.
+        assert!(!dets[0].result.contains("27"), "page number leaked: {}", dets[0].result);
+        assert_eq!(dets[1].title, "DCSync tool and target (Invoke-Mimikatz)");
+        assert!(dets[1].query.contains("wineventlog:sysmon"));
+        assert!(dets[1].result.contains("Invoke-Mimikatz"));
+    }
+
+    #[test]
+    fn detection_with_multiple_queries_and_leading_fragment() {
+        let block = "\
+der.\n\
+Detection 6: Lateral Movement (PsExec and WMIC)\n\
+Data source: Windows System log, Event ID 7045; Sysmon Event ID 1.\n\
+Query: PsExec service installs:\n\
+index=windows OR index=main EventCode=7045 PSEXESVC\n\
+| sort t\n\
+30\n\
+Query: WMI remote execution:\n\
+index=windows sourcetype=\"wineventlog:sysmon\" EventCode=1 Image=\"*WMIC.exe*\"\n\
+| sort t\n\
+Result: The attacker used two remote-execution techniques to move between hosts.";
+        let dets = extract_detections(block);
+        assert_eq!(dets.len(), 1, "leading fragment should not start a detection: {dets:?}");
+        assert_eq!(dets[0].title, "Lateral Movement (PsExec and WMIC)");
+        // Both query segments captured, sub-labels and page number dropped.
+        assert!(dets[0].query.contains("PSEXESVC"), "q: {}", dets[0].query);
+        assert!(dets[0].query.contains("WMIC.exe"), "q: {}", dets[0].query);
+        assert!(!dets[0].query.contains("PsExec service installs"), "sub-label leaked");
+        assert!(!dets[0].query.contains("30"), "page number leaked");
+        assert!(dets[0].result.contains("two remote-execution techniques"));
     }
 
     #[test]
