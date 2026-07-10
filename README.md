@@ -37,6 +37,10 @@ the binary, so it runs completely offline (airgap-friendly).
   Essential Eight maturity matrix, and deterministic reporting-obligation
   helpers for the SOCI Act (12h/72h) and the OAIC Notifiable Data Breaches
   scheme. Advisory decision support, not legal advice.
+- **Live report linter** — a checks panel that flags completeness gaps,
+  consistency issues (techniques or hosts named in prose but missing from the
+  tables), and sanitisation concerns (internal IPs to review before external
+  release), updating as you edit.
 - **18 palettes × 7 procedural cover-art styles** — 100+ professional looks;
   all cover art is generated (no stock images, no licensing).
 - **PDF export** — writes to `Desktop\IntelScribe Exports\`.
@@ -137,6 +141,8 @@ cargo run -p intelscribe-core --example build_packs
   technique suggestion from incident text.
 - **Australian frameworks — done.** ACSC C1–C6 categorisation, Essential Eight
   maturity matrix, SOCI Act and OAIC NDB reporting-obligation helpers.
+- **Report linter — done.** Live completeness, consistency and sanitisation
+  checks in the editor.
 - **M4 — planned.** More report templates (pentest + retest, threat hunt,
   threat-intel/actor profile, executive one-pager).
 - **M5 — planned.** Evidence vault (hashing, redaction), IoC auto-extraction

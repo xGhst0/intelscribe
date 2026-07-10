@@ -87,6 +87,11 @@ fn suggest_techniques(text: String) -> Vec<packs::Technique> {
 }
 
 #[tauri::command(rename_all = "snake_case")]
+fn lint_report(engagement: Engagement) -> Vec<intelscribe_core::lint::LintFinding> {
+    intelscribe_core::lint::lint(&engagement)
+}
+
+#[tauri::command(rename_all = "snake_case")]
 fn score_cvss(vector: String) -> Result<intelscribe_core::cvss::CvssResult, String> {
     intelscribe_core::cvss::score_vector(&vector)
 }
@@ -160,6 +165,7 @@ fn main() {
             search_ism,
             extract_iocs,
             suggest_techniques,
+            lint_report,
             score_cvss,
             pack_info,
             draft_summary,

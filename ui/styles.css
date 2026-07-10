@@ -81,6 +81,59 @@ body {
 
 .toolbar button:hover { filter: brightness(1.12); }
 
+/* ---- Report linter panel ---- */
+
+.lint {
+  margin: 10px 16px 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel-2);
+  font-size: 11.5px;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.lint.clean {
+  padding: 7px 11px;
+  color: #6ee7a8;
+  border-color: #2c5c42;
+}
+
+.lint-head {
+  position: sticky;
+  top: 0;
+  padding: 7px 11px;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--panel-2);
+  border-bottom: 1px solid var(--border);
+}
+
+.lint-list { list-style: none; margin: 0; padding: 4px 0; }
+
+.lint-item {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  padding: 4px 11px;
+  color: var(--text);
+  line-height: 1.4;
+}
+
+.lint-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin-top: 4px;
+}
+
+.lvl-error .lint-dot { background: #e2564a; }
+.lvl-warning .lint-dot { background: #d9a521; }
+.lvl-info .lint-dot { background: #5b8def; }
+
+.lint-loc { color: var(--muted); flex: none; }
+
 #form {
   flex: 1;
   overflow-y: auto;

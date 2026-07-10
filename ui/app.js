@@ -25,6 +25,7 @@ function mockInvoke(cmd) {
     case "search_ism":
     case "extract_iocs":
     case "suggest_techniques":
+    case "lint_report":
       return [];
     default:
       throw "This action needs the IntelScribe desktop app — run: cargo run -p intelscribe-app";
@@ -652,6 +653,38 @@ function setStatus(text, isError = false) {
   s.className = "status" + (isError ? " error" : "");
 }
 
+/* ---------- Report linter panel ---------- */
+
+function renderLint(findings) {
+  const box = $("#lint");
+  box.innerHTML = "";
+  if (!findings.length) {
+    box.className = "lint clean";
+    box.textContent = "✓ No report issues detected";
+    return;
+  }
+  box.className = "lint";
+  const counts = { error: 0, warning: 0, info: 0 };
+  for (const f of findings) counts[f.level] = (counts[f.level] || 0) + 1;
+  box.append(el("div", { class: "lint-head" },
+    `Report checks — ${counts.error} error${counts.error === 1 ? "" : "s"}, ` +
+    `${counts.warning} warning${counts.warning === 1 ? "" : "s"}, ${counts.info} info`));
+  const list = el("ul", { class: "lint-list" });
+  for (const f of findings) {
+    list.append(el("li", { class: "lint-item lvl-" + f.level },
+      el("span", { class: "lint-dot" }),
+      el("span", { class: "lint-loc" }, f.location + ": "),
+      document.createTextNode(f.message)));
+  }
+  box.append(list);
+}
+
+async function runLint() {
+  try {
+    renderLint(await invoke("lint_report", { engagement: state }));
+  } catch (_) { /* mock mode or transient error */ }
+}
+
 function schedule() {
   clearTimeout(timer);
   timer = setTimeout(renderPreview, 500);
@@ -659,6 +692,7 @@ function schedule() {
 
 async function renderPreview() {
   const seq = ++renderSeq;
+  runLint();
   setStatus("Rendering…");
   try {
     const res = await invoke("render_preview", {
