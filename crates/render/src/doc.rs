@@ -172,6 +172,13 @@ pub fn build_source(e: &Engagement, theme: &Theme, tpl: &ReportTemplate, art_sty
         esc(&e.analyst_title)
     );
 
+    // Branch on report type. The preamble above (styles, cover, TOC,
+    // confidentiality, contacts) is shared by every report.
+    if e.report_kind.trim().eq_ignore_ascii_case("pentest") {
+        pentest_body(&mut s, e, theme);
+        return s;
+    }
+
     // Executive summary, one subsection per incident.
     s.push_str("= Executive Summary\n");
     for (i, inc) in e.incidents.iter().enumerate() {
@@ -186,6 +193,184 @@ pub fn build_source(e: &Engagement, theme: &Theme, tpl: &ReportTemplate, art_sty
     essential_eight_section(&mut s, e, theme);
 
     s
+}
+
+fn severity_rank(sev: intelscribe_core::model::Severity) -> u8 {
+    use intelscribe_core::model::Severity::*;
+    match sev {
+        Critical => 0,
+        High => 1,
+        Medium => 2,
+        Low => 3,
+        Informational => 4,
+    }
+}
+
+/// Penetration-test report body (executive summary, scope, methodology and
+/// detailed findings). Reuses the shared cover/confidentiality preamble.
+fn pentest_body(s: &mut String, e: &Engagement, theme: &Theme) {
+    let p = &theme.palette;
+    let tpl = intelscribe_core::template::pentest_report();
+
+    s.push_str("= Executive Summary\n");
+    guidance(s, theme, &tpl.exec_guidance);
+    if !e.executive_summary.trim().is_empty() {
+        let _ = writeln!(s, "{}\n", esc(e.executive_summary.trim()));
+    }
+    findings_summary(s, e, theme);
+
+    if !e.scope.trim().is_empty() {
+        s.push_str("== Scope\n");
+        guidance(s, theme, &tpl.scope_guidance);
+        let _ = writeln!(s, "{}\n", esc(e.scope.trim()));
+    }
+    if !e.methodology.trim().is_empty() {
+        s.push_str("== Methodology\n");
+        guidance(s, theme, &tpl.methodology_guidance);
+        let _ = writeln!(s, "{}\n", esc(e.methodology.trim()));
+    }
+
+    let _ = writeln!(s, "#pagebreak()\n= Findings");
+    guidance(s, theme, &tpl.findings_guidance);
+    if e.findings.is_empty() {
+        let _ = writeln!(s, "#text(fill: rgb(\"{}\"))[No findings recorded.]\n", p.muted);
+        return;
+    }
+    let mut order: Vec<usize> = (0..e.findings.len()).collect();
+    order.sort_by_key(|&i| severity_rank(e.findings[i].severity));
+    for (n, &i) in order.iter().enumerate() {
+        finding_section(s, &e.findings[i], n + 1, theme);
+    }
+}
+
+/// Severity distribution badges and a summary table of all findings.
+fn findings_summary(s: &mut String, e: &Engagement, theme: &Theme) {
+    let p = &theme.palette;
+    if e.findings.is_empty() {
+        return;
+    }
+    use intelscribe_core::model::Severity::*;
+    let sevs = [Critical, High, Medium, Low, Informational];
+    let mut cells = String::new();
+    for sev in sevs {
+        let count = e.findings.iter().filter(|f| f.severity == sev).count();
+        let color = theme.severity_color(sev);
+        let _ = writeln!(
+            cells,
+            "box(width: 100%, fill: rgb(\"{color}\"), radius: 4pt, inset: (y: 7pt))[#align(center)[#text(fill: white, size: 15pt, weight: \"bold\")[{count}]#linebreak()#text(fill: white, size: 7.5pt, tracking: 0.6pt)[{label}]]],",
+            label = sev.label().to_uppercase(),
+        );
+    }
+    let _ = writeln!(
+        s,
+        "#grid(columns: (1fr, 1fr, 1fr, 1fr, 1fr), gutter: 6pt,\n{cells})\n#v(8pt)"
+    );
+
+    // Summary table, ordered by severity.
+    let mut order: Vec<usize> = (0..e.findings.len()).collect();
+    order.sort_by_key(|&i| severity_rank(e.findings[i].severity));
+    let mut rows = String::new();
+    for (n, &i) in order.iter().enumerate() {
+        let f = &e.findings[i];
+        let sev = theme.severity_color(f.severity);
+        let cvss = cvss::score_vector(&f.cvss_vector)
+            .ok()
+            .filter(|_| !f.cvss_vector.trim().is_empty())
+            .map(|r| format!("{}", r.score))
+            .unwrap_or_else(|| "—".to_string());
+        let status = if f.status.trim().is_empty() { "Open" } else { f.status.trim() };
+        let _ = writeln!(
+            rows,
+            "[#text(size: 8.5pt)[F{num}]], [#text(size: 9pt)[{title}]], [#box(fill: rgb(\"{sev}\"), radius: 2.5pt, inset: (x: 5pt, y: 2.5pt))[#text(fill: white, size: 7.5pt, weight: \"bold\")[{sevlabel}]]], [#text(size: 8.5pt)[{cvss}]], [#text(size: 8.5pt)[{status}]],",
+            num = n + 1,
+            title = esc(&f.title),
+            sevlabel = f.severity.label().to_uppercase(),
+            cvss = cvss,
+            status = esc(status),
+        );
+    }
+    let _ = writeln!(
+        s,
+        "#table(columns: (28pt, 1fr, 74pt, 42pt, 78pt), stroke: 0.5pt + rgb(\"{border}\"), inset: 6pt, fill: (x, y) => if y == 0 {{ rgb(\"{primary}\") }} else if calc.even(y) {{ rgb(\"{stripe}\") }} else {{ white }},\n{h1},\n{h2},\n{h3},\n{h4},\n{h5},\n{rows})\n",
+        h1 = table_header_cell("No."),
+        h2 = table_header_cell("Finding"),
+        h3 = table_header_cell("Severity"),
+        h4 = table_header_cell("CVSS"),
+        h5 = table_header_cell("Status"),
+        border = p.table_border,
+        primary = p.primary,
+        stripe = p.stripe,
+        rows = rows,
+    );
+}
+
+fn finding_section(s: &mut String, f: &intelscribe_core::model::Finding, n: usize, theme: &Theme) {
+    let p = &theme.palette;
+    let mono = esc_str(&theme.typography.mono_font);
+    let title = if f.title.trim().is_empty() {
+        String::new()
+    } else {
+        format!(": {}", esc(&f.title))
+    };
+    let _ = writeln!(s, "== Finding F{n}{title}");
+
+    // Meta table.
+    let sev = theme.severity_color(f.severity);
+    let mut meta = format!(
+        "[#text(weight: \"bold\")[Severity:]], [#box(fill: rgb(\"{sev}\"), radius: 3pt, inset: (x: 7pt, y: 3.5pt))[#text(fill: white, size: 8.5pt, weight: \"bold\", tracking: 0.6pt)[{sevlabel}]]],",
+        sevlabel = f.severity.label().to_uppercase(),
+    );
+    if let Ok(r) = cvss::score_vector(&f.cvss_vector) {
+        if !f.cvss_vector.trim().is_empty() {
+            let color = severity_rating_color(p, &r.rating);
+            meta.push_str(&format!(
+                "\n[#text(weight: \"bold\")[CVSS 3.1:]], [#box(fill: rgb(\"{color}\"), radius: 3pt, inset: (x: 7pt, y: 3.5pt))[#text(fill: white, size: 8.5pt, weight: \"bold\")[{score} {rating}]] #h(6pt) #text(font: \"{mono}\", size: 8pt, fill: rgb(\"{muted}\"))[{vector}]],",
+                color = color, score = r.score, rating = r.rating,
+                muted = p.muted, vector = esc(&r.vector),
+            ));
+        }
+    }
+    if !f.category.trim().is_empty() {
+        meta.push_str(&format!("\n[#text(weight: \"bold\")[Category:]], [{}],", esc(&f.category)));
+    }
+    let status = if f.status.trim().is_empty() { "Open" } else { f.status.trim() };
+    meta.push_str(&format!("\n[#text(weight: \"bold\")[Status:]], [{}],", esc(status)));
+    if !f.affected.trim().is_empty() {
+        meta.push_str(&format!("\n[#text(weight: \"bold\")[Affected:]], [{}],", esc(&f.affected)));
+    }
+    let _ = writeln!(
+        s,
+        "#table(columns: (86pt, 1fr), stroke: none, inset: (y: 3.5pt, x: 0pt),\n{meta}\n)"
+    );
+
+    if !f.description.trim().is_empty() {
+        s.push_str("=== Description\n");
+        let _ = writeln!(s, "{}\n", esc(f.description.trim()));
+    }
+    if !f.impact.trim().is_empty() {
+        s.push_str("=== Impact\n");
+        let _ = writeln!(s, "{}\n", esc(f.impact.trim()));
+    }
+    if !f.remediation.trim().is_empty() {
+        s.push_str("=== Remediation\n");
+        let _ = writeln!(s, "{}\n", esc(f.remediation.trim()));
+    }
+
+    // ISM references, quoted verbatim.
+    let refs: Vec<_> = f.references.iter().filter_map(|id| packs::ism_control(id)).collect();
+    if !refs.is_empty() {
+        s.push_str("=== References — ACSC ISM\n");
+        for c in refs {
+            let _ = writeln!(
+                s,
+                "- #text(font: \"{mono}\", weight: \"bold\", size: 8.5pt)[{id}] — {text}",
+                id = esc(&c.id),
+                text = esc(&c.text),
+            );
+        }
+        s.push('\n');
+    }
+    let _ = writeln!(s, "#v(4pt)\n#line(length: 100%, stroke: 0.5pt + rgb(\"{}\"))\n", p.table_border);
 }
 
 fn cover(s: &mut String, e: &Engagement, theme: &Theme, classification: &str, art_style: &str) {

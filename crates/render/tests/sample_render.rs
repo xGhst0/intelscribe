@@ -105,6 +105,36 @@ fn autofill_drafts_from_sample_data() {
 }
 
 #[test]
+fn pentest_report_renders() {
+    let engagement: Engagement =
+        serde_json::from_str(include_str!("../fixtures/demo_pentest.json"))
+            .expect("pentest fixture matches the model");
+    let tpl = template::incident_report();
+    let theme = theme::get("Cobalt Ops");
+    let src = intelscribe_render::build_source(&engagement, &theme, &tpl, "auto");
+    for expected in [
+        "= Findings",
+        "Finding F1",
+        "Unauthenticated SQL injection",
+        "= Scope",
+        "Methodology",
+        "References — ACSC ISM",
+        // ISM-1657 quoted in the critical finding's references.
+        "Application control restricts the execution of executables",
+    ] {
+        assert!(src.contains(expected), "pentest missing: {expected}");
+    }
+    // It must NOT render incident-only sections.
+    assert!(!src.contains("Attack Path Overview"), "incident section leaked into pentest");
+
+    let pdf = intelscribe_render::render_pdf(&src).expect("pentest PDF renders");
+    assert!(pdf.len() > 10_000);
+
+    let dir = artifacts_dir();
+    std::fs::write(dir.join("pentest.pdf"), &pdf).unwrap();
+}
+
+#[test]
 fn empty_engagement_still_renders() {
     let engagement = Engagement::default();
     let theme = theme::get("Harbour Teal");

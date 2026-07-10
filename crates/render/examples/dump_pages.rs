@@ -10,8 +10,11 @@ fn main() {
     let theme_name = args.get(1).map(String::as_str).unwrap_or("Harbour Teal");
     let art = args.get(2).map(String::as_str).unwrap_or("auto");
 
-    let engagement: intelscribe_core::model::Engagement =
-        serde_json::from_str(include_str!("../fixtures/demo_engagement.json")).unwrap();
+    // Optional 3rd arg: a fixture path. Defaults to the incident demo.
+    let engagement: intelscribe_core::model::Engagement = match args.get(3) {
+        Some(path) => serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap(),
+        None => serde_json::from_str(include_str!("../fixtures/demo_engagement.json")).unwrap(),
+    };
     let tpl = template::incident_report();
     let theme = theme::get(theme_name);
     let src = intelscribe_render::build_source(&engagement, &theme, &tpl, art);

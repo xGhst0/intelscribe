@@ -21,3 +21,19 @@ pub fn incident_report() -> ReportTemplate {
     toml::from_str(include_str!("../../../templates/incident-report.toml"))
         .expect("bundled incident-report template is valid TOML")
 }
+
+/// Boilerplate and guidance for the penetration-test report.
+#[derive(Debug, Clone, Deserialize)]
+pub struct PentestTemplate {
+    pub id: String,
+    pub name: String,
+    pub exec_guidance: String,
+    pub scope_guidance: String,
+    pub methodology_guidance: String,
+    pub findings_guidance: String,
+}
+
+pub fn pentest_report() -> PentestTemplate {
+    toml::from_str(include_str!("../../../templates/pentest-report.toml"))
+        .expect("bundled pentest-report template is valid TOML")
+}

@@ -78,10 +78,7 @@ pub fn lint(e: &Engagement) -> Vec<LintFinding> {
         });
     };
 
-    // ---- Engagement-level ----
-    if e.incidents.is_empty() {
-        add("error", "completeness", "The report has no incidents.".into(), "Engagement");
-    }
+    // ---- Engagement-level (all report kinds) ----
     if e.classification.trim().is_empty() {
         add("warning", "classification", "No classification marking is set.".into(), "Engagement");
     }
@@ -89,7 +86,37 @@ pub fn lint(e: &Engagement) -> Vec<LintFinding> {
         add("info", "completeness", "No client / organisation name is set.".into(), "Engagement");
     }
 
-    // ---- Per-incident ----
+    // ---- Penetration-test report ----
+    if e.report_kind.trim().eq_ignore_ascii_case("pentest") {
+        if e.executive_summary.trim().is_empty() {
+            add("warning", "completeness", "No executive summary.".into(), "Engagement");
+        }
+        if e.scope.trim().is_empty() {
+            add("info", "completeness", "No scope is defined.".into(), "Engagement");
+        }
+        if e.findings.is_empty() {
+            add("warning", "completeness", "No findings recorded.".into(), "Engagement");
+        }
+        for (i, f) in e.findings.iter().enumerate() {
+            let loc = format!("Finding F{}", i + 1);
+            if f.title.trim().is_empty() {
+                add("warning", "completeness", "Finding has no title.".into(), &loc);
+            }
+            if f.remediation.trim().is_empty() {
+                add("warning", "completeness", "Finding has no remediation guidance.".into(), &loc);
+            }
+            if f.description.trim().is_empty() {
+                add("info", "completeness", "Finding has no description.".into(), &loc);
+            }
+        }
+        out.sort_by(|a, b| level_rank(&a.level).cmp(&level_rank(&b.level)));
+        return out;
+    }
+
+    // ---- Incident report ----
+    if e.incidents.is_empty() {
+        add("error", "completeness", "The report has no incidents.".into(), "Engagement");
+    }
     for (i, inc) in e.incidents.iter().enumerate() {
         let loc = format!("Incident {}", i + 1);
         let prose = incident_prose(inc);
@@ -264,6 +291,29 @@ mod tests {
         }];
         let findings = lint(&e);
         assert!(has(&findings, "Internal IP"), "{findings:?}");
+    }
+
+    #[test]
+    fn pentest_flags_missing_remediation() {
+        use crate::model::Finding;
+        let mut e = Engagement {
+            classification: "OFFICIAL".into(),
+            client: "Acme".into(),
+            report_kind: "pentest".into(),
+            executive_summary: "Summary.".into(),
+            scope: "In scope.".into(),
+            ..Default::default()
+        };
+        e.findings.push(Finding {
+            title: "SQLi".into(),
+            description: "desc".into(),
+            remediation: String::new(),
+            ..Default::default()
+        });
+        let findings = lint(&e);
+        assert!(has(&findings, "no remediation"), "{findings:?}");
+        // Must not fire the incident-only 'no incidents' error.
+        assert!(!findings.iter().any(|f| f.message.contains("no incidents")));
     }
 
     #[test]

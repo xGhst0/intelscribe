@@ -15,6 +15,40 @@ pub struct Engagement {
     pub incidents: Vec<Incident>,
     /// Engagement-level ACSC Essential Eight maturity self-assessment.
     pub essential_eight: Vec<EssentialEightItem>,
+
+    /// Which report to produce: "" or "incident" (default) render the incident
+    /// report; "pentest" renders the penetration-test report from the fields
+    /// below.
+    pub report_kind: String,
+    /// Pentest: engagement-level executive summary prose.
+    pub executive_summary: String,
+    /// Pentest: scope of the assessment.
+    pub scope: String,
+    /// Pentest: methodology / approach.
+    pub methodology: String,
+    /// Pentest: the findings.
+    pub findings: Vec<Finding>,
+}
+
+/// A penetration-test finding.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct Finding {
+    pub title: String,
+    pub severity: Severity,
+    /// Optional CVSS 3.1 base vector.
+    pub cvss_vector: String,
+    /// Category, e.g. "Injection", "Access Control", "Cryptography".
+    pub category: String,
+    /// Affected assets / endpoints.
+    pub affected: String,
+    pub description: String,
+    pub impact: String,
+    pub remediation: String,
+    /// ISM control ids supporting the remediation (quoted verbatim).
+    pub references: Vec<String>,
+    /// Remediation status: "Open", "Remediated", "Risk Accepted", etc.
+    pub status: String,
 }
 
 /// One row of an Essential Eight maturity assessment. Levels are 0–3.

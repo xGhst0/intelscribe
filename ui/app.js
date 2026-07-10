@@ -83,6 +83,13 @@ const E8_STRATEGIES = [
   "Regular backups",
 ];
 
+const REPORT_KINDS = [
+  ["incident", "Incident report"],
+  ["pentest", "Penetration test report"],
+];
+
+const FINDING_STATUS = ["Open", "Remediated", "Risk Accepted", "Not Applicable"];
+
 /* ---------- State ---------- */
 
 function defaultRegulatory() {
@@ -104,6 +111,13 @@ function defaultIncident() {
   };
 }
 
+function defaultFinding() {
+  return {
+    title: "", severity: "Medium", cvss_vector: "", category: "", affected: "",
+    description: "", impact: "", remediation: "", references: [], status: "Open",
+  };
+}
+
 function defaultEngagement() {
   const date = new Date().toLocaleDateString("en-AU", {
     day: "numeric", month: "long", year: "numeric",
@@ -114,6 +128,8 @@ function defaultEngagement() {
     date, version: "1.0", classification: "OFFICIAL: Sensitive",
     incidents: [defaultIncident()],
     essential_eight: [],
+    report_kind: "incident", executive_summary: "", scope: "", methodology: "",
+    findings: [],
   };
 }
 
@@ -616,6 +632,41 @@ function e8Section() {
   return el("div", {}, populate, list);
 }
 
+/* Report-type selector — switching rebuilds the whole form. */
+function reportKindField() {
+  const input = el("select");
+  for (const [v, t] of REPORT_KINDS) input.append(el("option", { value: v }, t));
+  input.value = state.report_kind || "incident";
+  input.addEventListener("change", () => {
+    state.report_kind = input.value;
+    rebuild();
+    schedule();
+  });
+  return wrapField("Report type", input);
+}
+
+/* Penetration-test form: exec summary, scope, methodology, findings. */
+function pentestForm() {
+  return el("div", {},
+    field(state, "executive_summary", "Executive summary", "textarea"),
+    field(state, "scope", "Scope", "textarea"),
+    field(state, "methodology", "Methodology", "textarea"),
+    section("Findings", true, itemList(state.findings, (box, f) => {
+      box.append(
+        field(f, "title", "Finding title"),
+        row(field(f, "severity", "Severity", "select", SEVERITIES),
+            field(f, "status", "Status", "select", FINDING_STATUS)),
+        row(field(f, "category", "Category"), field(f, "affected", "Affected assets")),
+        section("CVSS 3.1 severity", false, cvssBuilder(f)),
+        field(f, "description", "Description", "textarea"),
+        field(f, "impact", "Impact", "textarea"),
+        field(f, "remediation", "Remediation", "textarea"),
+        section("ISM references (quoted verbatim)", false, ismList(f.references)),
+      );
+    }, defaultFinding, "+ Add finding")),
+  );
+}
+
 function rebuild() {
   const form = $("#form");
   form.innerHTML = "";
@@ -632,9 +683,16 @@ function rebuild() {
         field(state, "version", "Version"),
       ),
       field(state, "classification", "Classification marking"),
+      reportKindField(),
     ),
-    section("Essential Eight maturity (engagement-level)", false, e8Section()),
   );
+
+  if ((state.report_kind || "incident") === "pentest") {
+    form.append(pentestForm());
+    return;
+  }
+
+  form.append(section("Essential Eight maturity (engagement-level)", false, e8Section()));
   state.incidents.forEach((inc, idx) => form.append(incidentSection(inc, idx)));
   form.append(el("button", {
     class: "add", type: "button",

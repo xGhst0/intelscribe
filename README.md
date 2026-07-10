@@ -14,6 +14,9 @@ the binary, so it runs completely offline (airgap-friendly).
 
 ## Features
 
+- **Two report types** — an incident report and a penetration-test report
+  (findings-centric, with per-finding CVSS, remediation and retest status),
+  switched from a single dropdown; both share the cover, themes and CVSS engine.
 - **Paste-to-extract & auto-mapping** — paste raw logs or alert text to
   auto-extract defanged IoCs (IPs, URLs, domains, hashes, paths, registry keys,
   emails), and suggest MITRE ATT&CK techniques from the text; suggested
@@ -143,8 +146,9 @@ cargo run -p intelscribe-core --example build_packs
   maturity matrix, SOCI Act and OAIC NDB reporting-obligation helpers.
 - **Report linter — done.** Live completeness, consistency and sanitisation
   checks in the editor.
-- **M4 — planned.** More report templates (pentest + retest, threat hunt,
-  threat-intel/actor profile, executive one-pager).
+- **M4 — in progress.** More report types. Penetration-test report done
+  (findings with CVSS, remediation and status); threat hunt, threat-intel/actor
+  profile and executive one-pager to follow.
 - **M5 — planned.** Evidence vault (hashing, redaction), IoC auto-extraction
   from pasted logs, report linter, engagement files, DOCX export.
 
