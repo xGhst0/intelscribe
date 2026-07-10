@@ -149,12 +149,60 @@ fn list_themes() -> Vec<ThemeMeta> {
         .collect()
 }
 
+#[tauri::command(rename_all = "snake_case")]
+fn save_engagement(engagement: Engagement) -> Result<Option<String>, String> {
+    let stem = {
+        let t = sanitize_filename(&engagement.title);
+        if t.is_empty() { "report".to_string() } else { t }
+    };
+    let picked = rfd::FileDialog::new()
+        .add_filter("IntelScribe report", &["sok"])
+        .set_directory(projects_dir())
+        .set_file_name(format!("{stem}.sok"))
+        .save_file();
+    match picked {
+        Some(path) => {
+            let json = serde_json::to_string_pretty(&engagement).map_err(|e| e.to_string())?;
+            std::fs::write(&path, json).map_err(|e| e.to_string())?;
+            Ok(Some(path.display().to_string()))
+        }
+        None => Ok(None),
+    }
+}
+
+#[tauri::command(rename_all = "snake_case")]
+fn open_engagement() -> Result<Option<Engagement>, String> {
+    let picked = rfd::FileDialog::new()
+        .add_filter("IntelScribe report", &["sok"])
+        .set_directory(projects_dir())
+        .pick_file();
+    match picked {
+        Some(path) => {
+            let text = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+            let engagement: Engagement = serde_json::from_str(&text)
+                .map_err(|e| format!("Not a valid .sok file: {e}"))?;
+            Ok(Some(engagement))
+        }
+        None => Ok(None),
+    }
+}
+
 fn export_dir() -> PathBuf {
     std::env::var_os("USERPROFILE")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("."))
         .join("Desktop")
         .join("IntelScribe Exports")
+}
+
+fn projects_dir() -> PathBuf {
+    let dir = std::env::var_os("USERPROFILE")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("Desktop")
+        .join("IntelScribe Projects");
+    let _ = std::fs::create_dir_all(&dir);
+    dir
 }
 
 fn sanitize_filename(name: &str) -> String {
@@ -176,6 +224,8 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             render_preview,
             export_pdf,
+            save_engagement,
+            open_engagement,
             search_techniques,
             search_ism,
             extract_iocs,

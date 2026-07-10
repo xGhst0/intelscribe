@@ -21,6 +21,9 @@ function mockInvoke(cmd) {
       return ["hexgrid", "circuit", "network", "radar", "binary", "contours", "none"];
     case "pack_info":
       return { attack_version: "—", ism_version: "—", technique_count: 0 };
+    case "save_engagement":
+    case "open_engagement":
+      return null;
     case "search_techniques":
     case "search_ism":
     case "extract_iocs":
@@ -876,6 +879,29 @@ async function init() {
     state = defaultEngagement();
     rebuild();
     renderPreview();
+  });
+
+  $("#btn-save").addEventListener("click", async () => {
+    try {
+      const path = await invoke("save_engagement", { engagement: state });
+      if (path) setStatus("Saved: " + path);
+    } catch (err) {
+      setStatus(String(err), true);
+    }
+  });
+
+  $("#btn-open").addEventListener("click", async () => {
+    try {
+      const engagement = await invoke("open_engagement");
+      if (engagement) {
+        state = engagement;
+        rebuild();
+        renderPreview();
+        setStatus("Opened " + (state.title || "report") + ".");
+      }
+    } catch (err) {
+      setStatus(String(err), true);
+    }
   });
 
   $("#btn-export").addEventListener("click", async () => {

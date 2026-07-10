@@ -12,3 +12,4 @@ intelscribe-render = { path = "../render" }
 tauri = { version = "2", features = [] }
 serde = { workspace = true }
 serde_json = { workspace = true }
+rfd = "0.15"

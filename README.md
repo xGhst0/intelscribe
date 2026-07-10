@@ -51,7 +51,8 @@ the binary, so it runs completely offline (airgap-friendly).
   release), updating as you edit.
 - **18 palettes × 7 procedural cover-art styles** — 100+ professional looks;
   all cover art is generated (no stock images, no licensing).
-- **PDF export** — writes to `Desktop\IntelScribe Exports\`.
+- **Save / open** — save an engagement to a `.sok` project file (JSON) and
+  reopen it later; PDF export writes to `Desktop\IntelScribe Exports\`.
 
 ## Stack
 
