@@ -24,6 +24,8 @@ function mockInvoke(cmd) {
     case "search_techniques":
     case "search_ism":
     case "extract_iocs":
+    case "extract_hosts":
+    case "extract_events":
     case "suggest_techniques":
     case "lint_report":
       return [];
@@ -463,17 +465,42 @@ function mergeTechniques(inc, incoming) {
   return added;
 }
 
-/* Paste box: extract IoCs and/or suggest ATT&CK techniques from raw text. */
+function mergeHosts(inc, incoming) {
+  let added = 0;
+  for (const h of incoming) {
+    const existing = inc.hosts.find((x) => x.name.toLowerCase() === h.name.toLowerCase());
+    if (existing) {
+      if (!existing.ip.trim() && h.ip) existing.ip = h.ip;
+    } else {
+      inc.hosts.push(h);
+      added++;
+    }
+  }
+  return added;
+}
+
+function mergeEvents(inc, incoming) {
+  let added = 0;
+  for (const ev of incoming) {
+    const dup = inc.events.some((x) => x.timestamp === ev.timestamp && x.description === ev.description);
+    if (!dup) { inc.events.push(ev); added++; }
+  }
+  return added;
+}
+
+/* Paste box: extract IoCs, hosts, timeline events and ATT&CK techniques from
+   raw text — individually or all at once. */
 function quickImport(inc) {
   const wrap = el("div");
   const ta = el("textarea", { placeholder: "Paste logs, alert text, or command output…" });
   ta.style.minHeight = "96px";
 
+  function text() { return ta.value.trim(); }
+
   async function run(cmd, merge, noun) {
-    const text = ta.value.trim();
-    if (!text) { setStatus("Paste some text into the import box first."); return; }
+    if (!text()) { setStatus("Paste some text into the import box first."); return; }
     try {
-      const items = await invoke(cmd, { text });
+      const items = await invoke(cmd, { text: text() });
       const added = merge(inc, items);
       rebuild();
       schedule();
@@ -483,13 +510,43 @@ function quickImport(inc) {
     }
   }
 
+  async function extractEverything() {
+    if (!text()) { setStatus("Paste some text into the import box first."); return; }
+    try {
+      const t = text();
+      const [iocs, hosts, events, techs] = await Promise.all([
+        invoke("extract_iocs", { text: t }),
+        invoke("extract_hosts", { text: t }),
+        invoke("extract_events", { text: t }),
+        invoke("suggest_techniques", { text: t }),
+      ]);
+      const h = mergeHosts(inc, hosts);
+      const ev = mergeEvents(inc, events);
+      const io = mergeIocs(inc, iocs);
+      const te = mergeTechniques(inc, techs);
+      rebuild();
+      schedule();
+      setStatus(`Extracted — ${h} hosts, ${ev} timeline events, ${io} IoCs, ${te} techniques added (duplicates skipped). Review and prune.`);
+    } catch (err) {
+      setStatus(String(err), true);
+    }
+  }
+
   wrap.append(
     ta,
+    el("button", { class: "add", type: "button", onclick: extractEverything },
+      "⚡ Extract everything"),
     el("div", { class: "row" },
       el("button", { class: "add", type: "button",
-        onclick: () => run("extract_iocs", mergeIocs, "IoC extraction") }, "⬇ Extract IoCs"),
+        onclick: () => run("extract_hosts", mergeHosts, "Host extraction") }, "🖥 Hosts"),
       el("button", { class: "add", type: "button",
-        onclick: () => run("suggest_techniques", mergeTechniques, "ATT&CK suggestions") }, "✨ Suggest ATT&CK"),
+        onclick: () => run("extract_events", mergeEvents, "Timeline extraction") }, "🕓 Timeline"),
+    ),
+    el("div", { class: "row" },
+      el("button", { class: "add", type: "button",
+        onclick: () => run("extract_iocs", mergeIocs, "IoC extraction") }, "⬇ IoCs"),
+      el("button", { class: "add", type: "button",
+        onclick: () => run("suggest_techniques", mergeTechniques, "ATT&CK suggestions") }, "✨ ATT&CK"),
     ),
   );
   return wrap;

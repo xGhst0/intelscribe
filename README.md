@@ -17,10 +17,12 @@ the binary, so it runs completely offline (airgap-friendly).
 - **Two report types** — an incident report and a penetration-test report
   (findings-centric, with per-finding CVSS, remediation and retest status),
   switched from a single dropdown; both share the cover, themes and CVSS engine.
-- **Paste-to-extract & auto-mapping** — paste raw logs or alert text to
-  auto-extract defanged IoCs (IPs, URLs, domains, hashes, paths, registry keys,
-  emails), and suggest MITRE ATT&CK techniques from the text; suggested
-  techniques cascade into the ATT&CK table, attack map and mitigations.
+- **Paste-to-extract & auto-mapping** — paste raw logs or alert text and
+  extract everything in one click: defanged IoCs (IPs, URLs, domains, hashes,
+  paths, registry keys, emails), affected hosts (name + IP), timeline events
+  (timestamp, host, description, guessed kill-chain phase), and suggested MITRE
+  ATT&CK techniques. Suggested techniques cascade into the ATT&CK table, attack
+  map and mitigations.
 - **Structured incident model** — enter each fact once (hosts, accounts,
   detections, IoCs, timeline events, techniques); every section is generated
   from it.
@@ -140,8 +142,8 @@ cargo run -p intelscribe-core --example build_packs
 - **M2 — done.** Full MITRE ATT&CK v19.1, ACSC ISM verbatim quoting, CVSS 3.1.
 - **M3 — done.** Attack-path map, auto-derived mitigations, exec-summary
   auto-draft, 18-palette theme engine with procedural cover art.
-- **Ingestion — done.** Paste logs → IoC extraction (with defang) and ATT&CK
-  technique suggestion from incident text.
+- **Ingestion — done.** Paste logs → extract IoCs (with defang), affected
+  hosts, timeline events (with phase), and suggested ATT&CK techniques.
 - **Australian frameworks — done.** ACSC C1–C6 categorisation, Essential Eight
   maturity matrix, SOCI Act and OAIC NDB reporting-obligation helpers.
 - **Report linter — done.** Live completeness, consistency and sanitisation
