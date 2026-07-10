@@ -24,6 +24,25 @@
     }
   },
   "bundle": {
-    "active": false
+    "active": true,
+    "targets": ["nsis"],
+    "publisher": "Benjamin Sokimi",
+    "copyright": "Copyright © 2026 Benjamin Sokimi",
+    "category": "Productivity",
+    "shortDescription": "Offline commercial-grade cyber report writer",
+    "longDescription": "IntelScribe is an offline desktop tool for writing commercial-grade technical cyber reports — incident and penetration-test reports — with bundled MITRE ATT&CK and the ACSC ISM, CVSS scoring, attack-path maps, and Australian compliance helpers.",
+    "icon": [
+      "icons/32x32.png",
+      "icons/64x64.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.png",
+      "icons/icon.ico"
+    ],
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser"
+      }
+    }
   }
 }
