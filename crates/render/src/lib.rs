@@ -1,8 +1,10 @@
 mod art;
 mod doc;
+mod docx;
 mod world;
 
 pub use doc::build_source;
+pub use docx::build_docx;
 
 use base64::Engine as _;
 use typst::diag::Warned;

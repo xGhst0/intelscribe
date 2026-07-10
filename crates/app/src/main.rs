@@ -40,6 +40,17 @@ async fn render_preview(
     })
 }
 
+fn export_stem(engagement: &Engagement) -> String {
+    let title = sanitize_filename(&engagement.title);
+    let client = sanitize_filename(&engagement.client);
+    match (title.is_empty(), client.is_empty()) {
+        (false, false) => format!("{title} - {client}"),
+        (false, true) => title,
+        (true, false) => client,
+        (true, true) => "report".to_string(),
+    }
+}
+
 #[tauri::command(rename_all = "snake_case")]
 async fn export_pdf(
     engagement: Engagement,
@@ -51,17 +62,18 @@ async fn export_pdf(
 
     let dir = export_dir();
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    let stem = {
-        let title = sanitize_filename(&engagement.title);
-        let client = sanitize_filename(&engagement.client);
-        match (title.is_empty(), client.is_empty()) {
-            (false, false) => format!("{title} - {client}"),
-            (false, true) => title,
-            (true, false) => client,
-            (true, true) => "report".to_string(),
-        }
-    };
-    let path = dir.join(format!("{stem}.pdf"));
+    let path = dir.join(format!("{}.pdf", export_stem(&engagement)));
+    std::fs::write(&path, bytes).map_err(|e| e.to_string())?;
+    Ok(path.display().to_string())
+}
+
+#[tauri::command(rename_all = "snake_case")]
+async fn export_docx(engagement: Engagement, theme_name: String) -> Result<String, String> {
+    let theme = theme::get(&theme_name);
+    let bytes = intelscribe_render::build_docx(&engagement, &theme)?;
+    let dir = export_dir();
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let path = dir.join(format!("{}.docx", export_stem(&engagement)));
     std::fs::write(&path, bytes).map_err(|e| e.to_string())?;
     Ok(path.display().to_string())
 }
@@ -224,6 +236,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             render_preview,
             export_pdf,
+            export_docx,
             save_engagement,
             open_engagement,
             search_techniques,

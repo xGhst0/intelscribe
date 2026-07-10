@@ -136,6 +136,32 @@ fn pentest_report_renders() {
 }
 
 #[test]
+fn docx_export_produces_valid_word_files() {
+    let tpl = template::incident_report();
+    let theme = theme::get("Harbour Teal");
+
+    // Incident report.
+    let incident: Engagement =
+        serde_json::from_str(include_str!("../fixtures/demo_engagement.json")).unwrap();
+    let _ = tpl; // docx does not need the template
+    let bytes = intelscribe_render::build_docx(&incident, &theme).expect("incident docx");
+    // A .docx is a zip; it must start with the PK signature and be non-trivial.
+    assert!(bytes.len() > 3000, "docx too small");
+    assert_eq!(&bytes[0..2], b"PK", "not a zip/docx");
+
+    // Pentest report.
+    let pentest: Engagement =
+        serde_json::from_str(include_str!("../fixtures/demo_pentest.json")).unwrap();
+    let pbytes = intelscribe_render::build_docx(&pentest, &theme).expect("pentest docx");
+    assert!(pbytes.len() > 3000);
+    assert_eq!(&pbytes[0..2], b"PK");
+
+    let dir = artifacts_dir();
+    std::fs::write(dir.join("sample.docx"), &bytes).unwrap();
+    std::fs::write(dir.join("pentest.docx"), &pbytes).unwrap();
+}
+
+#[test]
 fn empty_engagement_still_renders() {
     let engagement = Engagement::default();
     let theme = theme::get("Harbour Teal");

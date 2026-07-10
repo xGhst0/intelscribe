@@ -24,6 +24,8 @@ function mockInvoke(cmd) {
     case "save_engagement":
     case "open_engagement":
       return null;
+    case "export_docx":
+      throw "DOCX export needs the IntelScribe desktop app.";
     case "search_techniques":
     case "search_ism":
     case "extract_iocs":
@@ -911,6 +913,19 @@ async function init() {
         engagement: state,
         theme_name: themeSelect.value,
         art_style: $("#art-select").value || "auto",
+      });
+      setStatus("Saved: " + path);
+    } catch (err) {
+      setStatus(String(err), true);
+    }
+  });
+
+  $("#btn-export-docx").addEventListener("click", async () => {
+    setStatus("Exporting DOCX…");
+    try {
+      const path = await invoke("export_docx", {
+        engagement: state,
+        theme_name: themeSelect.value,
       });
       setStatus("Saved: " + path);
     } catch (err) {

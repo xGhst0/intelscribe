@@ -13,6 +13,7 @@ typst-assets = { version = "0.13", features = ["fonts"] }
 # Pixmap::encode_png for the live preview.
 tiny-skia = { version = "0.11", features = ["png-format"] }
 base64 = "0.22"
+docx-rs = "0.4"
 
 [dev-dependencies]
 serde_json = { workspace = true }
