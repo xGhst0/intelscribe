@@ -195,6 +195,114 @@ pub fn build_source(e: &Engagement, theme: &Theme, tpl: &ReportTemplate, art_sty
     s
 }
 
+/// ATT&CK enterprise tactics in canonical (kill-chain) order.
+const TACTIC_ORDER: [&str; 14] = [
+    "Reconnaissance",
+    "Resource Development",
+    "Initial Access",
+    "Execution",
+    "Persistence",
+    "Privilege Escalation",
+    "Defense Evasion",
+    "Credential Access",
+    "Discovery",
+    "Lateral Movement",
+    "Collection",
+    "Command and Control",
+    "Exfiltration",
+    "Impact",
+];
+
+fn tactic_order_index(tactic: &str) -> usize {
+    TACTIC_ORDER
+        .iter()
+        .position(|t| t.eq_ignore_ascii_case(tactic))
+        .unwrap_or(TACTIC_ORDER.len())
+}
+
+fn truncate_chars(s: &str, max: usize) -> String {
+    if s.chars().count() <= max {
+        s.to_string()
+    } else {
+        let t: String = s.chars().take(max.saturating_sub(1)).collect();
+        format!("{}…", t.trim_end())
+    }
+}
+
+/// A compact ATT&CK Navigator-style coverage matrix: observed techniques laid
+/// out in columns by their primary tactic, in kill-chain order.
+fn attack_matrix(s: &mut String, inc: &Incident, theme: &Theme) {
+    let p = &theme.palette;
+    let mono = esc_str(&theme.typography.mono_font);
+    if inc.techniques.is_empty() {
+        return;
+    }
+
+    // Group techniques by primary (first) tactic.
+    let mut groups: Vec<(String, Vec<&intelscribe_core::model::TechniqueRef>)> = Vec::new();
+    for t in &inc.techniques {
+        let primary = t
+            .tactic
+            .split(',')
+            .next()
+            .unwrap_or("")
+            .trim()
+            .to_string();
+        let key = if primary.is_empty() { "Other".to_string() } else { primary };
+        match groups.iter_mut().find(|(k, _)| k.eq_ignore_ascii_case(&key)) {
+            Some((_, v)) => v.push(t),
+            None => groups.push((key, vec![t])),
+        }
+    }
+    groups.sort_by_key(|(k, _)| tactic_order_index(k));
+    for (_, v) in groups.iter_mut() {
+        v.sort_by(|a, b| a.id.cmp(&b.id));
+    }
+
+    s.push_str("=== ATT&CK Coverage Matrix\n");
+    let _ = writeln!(
+        s,
+        "#text(size: 8.5pt, fill: rgb(\"{}\"), style: \"italic\")[Observed techniques by tactic, in kill-chain order.]\n",
+        p.muted
+    );
+
+    // Lay out tactic columns four to a row.
+    const PER_ROW: usize = 4;
+    let mut cells = String::new();
+    for (tactic, techs) in &groups {
+        let mut chips = String::new();
+        for t in techs {
+            let _ = writeln!(
+                chips,
+                "#box(width: 100%, fill: rgb(\"{stripe}\"), stroke: 0.5pt + rgb(\"{border}\"), radius: 2.5pt, inset: (x: 4pt, y: 3pt))[#text(font: \"{mono}\", size: 7pt, weight: \"bold\", fill: rgb(\"{primary}\"))[{id}]#linebreak()#text(size: 6.5pt)[{name}]]",
+                stripe = p.stripe,
+                border = p.table_border,
+                primary = p.primary,
+                id = esc(&t.id),
+                name = esc(&truncate_chars(&t.name, 30)),
+            );
+            chips.push_str("#v(3pt)\n");
+        }
+        let _ = writeln!(
+            cells,
+            "box(width: 100%, inset: 0pt)[#box(width: 100%, fill: rgb(\"{accent}\"), radius: 3pt, inset: (x: 5pt, y: 4pt))[#text(fill: white, size: 7.5pt, weight: \"bold\")[{tactic}]]#v(4pt)\n{chips}],",
+            accent = p.primary,
+            tactic = esc(tactic),
+        );
+    }
+    // Pad the final row so the grid stays aligned.
+    let remainder = groups.len() % PER_ROW;
+    if remainder != 0 {
+        for _ in 0..(PER_ROW - remainder) {
+            cells.push_str("[],\n");
+        }
+    }
+    let _ = writeln!(
+        s,
+        "#grid(columns: (1fr, 1fr, 1fr, 1fr), gutter: 6pt, align: top,\n{cells})\n"
+    );
+}
+
 fn severity_rank(sev: intelscribe_core::model::Severity) -> u8 {
     use intelscribe_core::model::Severity::*;
     match sev {
@@ -707,6 +815,7 @@ fn technical_analysis(
             stripe = p.stripe,
             rows = rows,
         );
+        attack_matrix(s, inc, theme);
     }
 
     recommendations(s, inc, theme, tpl);

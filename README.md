@@ -26,8 +26,9 @@ the binary, so it runs completely offline (airgap-friendly).
 - **Structured incident model** — enter each fact once (hosts, accounts,
   detections, IoCs, timeline events, techniques); every section is generated
   from it.
-- **Attack-path map** — a kill-chain phase strip and a host-to-host movement
-  diagram drawn natively from your timeline.
+- **Attack-path map & ATT&CK coverage matrix** — a kill-chain phase strip and
+  host-to-host movement diagram drawn from your timeline, plus a Navigator-style
+  tactic×technique coverage matrix built from the mapped techniques.
 - **Auto-derived mitigations** — recommended controls ranked by the ATT&CK
   techniques you mapped, with an ACSC Essential Eight rollup.
 - **Executive-summary auto-draft** — composes overview, key findings and

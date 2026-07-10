@@ -60,6 +60,7 @@ fn generated_sections_appear() {
         "Essential Eight",
         "Observed Movement",
         "Framework Alignment",
+        "ATT&CK Coverage Matrix",
         "CVSS 3.1",
         // ISM control text is quoted verbatim.
         "Microsoft Office macros in files originating from the internet are blocked",
