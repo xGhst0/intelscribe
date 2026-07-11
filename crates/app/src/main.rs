@@ -145,6 +145,11 @@ fn draft_summary(incident: Incident) -> DraftSummary {
 }
 
 #[tauri::command(rename_all = "snake_case")]
+fn draft_pentest_summary(engagement: Engagement) -> String {
+    autofill::draft_pentest_summary(&engagement)
+}
+
+#[tauri::command(rename_all = "snake_case")]
 fn list_art_styles() -> Vec<String> {
     theme::ART_STYLES.iter().map(|s| s.to_string()).collect()
 }
@@ -250,6 +255,7 @@ fn main() {
             score_cvss,
             pack_info,
             draft_summary,
+            draft_pentest_summary,
             list_art_styles,
             list_themes
         ])

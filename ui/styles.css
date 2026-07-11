@@ -55,9 +55,16 @@ body {
 
 .toolbar {
   display: flex;
+  flex-direction: column;
   gap: 8px;
   padding: 0 16px 12px;
   border-bottom: 1px solid var(--border);
+}
+
+.toolbar-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .toolbar select, .toolbar button {
@@ -70,7 +77,9 @@ body {
   cursor: pointer;
 }
 
-.toolbar select { flex: 1; }
+.toolbar-row select { flex: 1; min-width: 130px; }
+
+.toolbar-row button { flex: 1 1 auto; white-space: nowrap; }
 
 .toolbar button.primary {
   background: var(--accent);
@@ -230,6 +239,31 @@ button.add {
 }
 
 button.add:hover { border-color: var(--accent); }
+
+/* ---- Quick import (paste) section ---- */
+
+.import-hint {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.4;
+  margin-bottom: 7px;
+}
+
+button.add.import-primary {
+  background: var(--accent);
+  color: #06282d;
+  border-color: var(--accent);
+  font-weight: 600;
+  margin: 8px 0;
+}
+
+.import-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.import-grid button.add { margin: 0; }
 
 /* ---- CVSS builder ---- */
 

@@ -3,7 +3,81 @@
 
 use serde::Serialize;
 
-use crate::model::{Incident, Phase, Severity};
+use crate::model::{Engagement, Incident, Phase, Severity};
+
+fn severity_rank(sev: Severity) -> u8 {
+    match sev {
+        Severity::Critical => 0,
+        Severity::High => 1,
+        Severity::Medium => 2,
+        Severity::Low => 3,
+        Severity::Informational => 4,
+    }
+}
+
+/// Draft a penetration-test executive summary from the findings: count,
+/// severity breakdown, the most significant finding, and an overall risk
+/// framing. Deterministic.
+pub fn draft_pentest_summary(e: &Engagement) -> String {
+    let n = e.findings.len();
+    if n == 0 {
+        return String::new();
+    }
+    let count = |sev: Severity| e.findings.iter().filter(|f| f.severity == sev).count();
+    let (c, h, m, l, i) = (
+        count(Severity::Critical),
+        count(Severity::High),
+        count(Severity::Medium),
+        count(Severity::Low),
+        count(Severity::Informational),
+    );
+
+    let mut parts: Vec<String> = Vec::new();
+    let subject = if e.client.trim().is_empty() {
+        "The assessment".to_string()
+    } else {
+        format!("The assessment of {}", e.client.trim())
+    };
+    parts.push(format!(
+        "{subject} identified {n} finding{}.",
+        if n == 1 { "" } else { "s" }
+    ));
+
+    let mut sev_bits = Vec::new();
+    for (num, word) in [(c, "critical"), (h, "high"), (m, "medium"), (l, "low"), (i, "informational")] {
+        if num > 0 {
+            sev_bits.push(format!("{num} {word}"));
+        }
+    }
+    if !sev_bits.is_empty() {
+        parts.push(format!("By severity: {}.", join_list(&sev_bits)));
+    }
+
+    if let Some(top) = e.findings.iter().min_by_key(|f| severity_rank(f.severity)) {
+        if !top.title.trim().is_empty() {
+            parts.push(format!(
+                "The most significant finding is {} ({} severity).",
+                top.title.trim(),
+                top.severity.label().to_lowercase()
+            ));
+        }
+    }
+
+    if c > 0 || h > 0 {
+        parts.push(
+            "Collectively the findings present a material risk that a moderately skilled attacker \
+             could exploit; prioritised remediation of the higher-severity findings is recommended."
+                .to_string(),
+        );
+    } else {
+        parts.push(
+            "The findings represent a low aggregate risk and can be addressed through routine \
+             hardening within normal maintenance windows."
+                .to_string(),
+        );
+    }
+    parts.join(" ")
+}
 
 #[derive(Debug, Clone, Serialize)]
 pub struct DraftSummary {

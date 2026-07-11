@@ -23,6 +23,7 @@ function mockInvoke(cmd) {
       return { attack_version: "—", ism_version: "—", technique_count: 0 };
     case "save_engagement":
     case "open_engagement":
+    case "draft_pentest_summary":
       return null;
     case "export_docx":
       throw "DOCX export needs the IntelScribe desktop app.";
@@ -551,22 +552,20 @@ function quickImport(inc) {
   }
 
   wrap.append(
+    el("div", { class: "import-hint" },
+      "Paste SIEM output, command results, notes, or a report section — IntelScribe extracts what it can, then you review."),
     ta,
-    el("button", { class: "add", type: "button", onclick: extractEverything },
+    el("button", { class: "add import-primary", type: "button", onclick: extractEverything },
       "⚡ Extract everything"),
-    el("div", { class: "row" },
+    el("div", { class: "import-grid" },
       el("button", { class: "add", type: "button",
         onclick: () => run("extract_hosts", mergeHosts, "Host extraction") }, "🖥 Hosts"),
       el("button", { class: "add", type: "button",
         onclick: () => run("extract_events", mergeEvents, "Timeline extraction") }, "🕓 Timeline"),
-    ),
-    el("div", { class: "row" },
       el("button", { class: "add", type: "button",
         onclick: () => run("extract_detections", mergeDetections, "Detection extraction") }, "🔎 Detections"),
       el("button", { class: "add", type: "button",
         onclick: () => run("extract_iocs", mergeIocs, "IoC extraction") }, "⬇ IoCs"),
-    ),
-    el("div", { class: "row" },
       el("button", { class: "add", type: "button",
         onclick: () => run("suggest_techniques", mergeTechniques, "ATT&CK suggestions") }, "✨ ATT&CK"),
     ),
@@ -724,9 +723,28 @@ function reportKindField() {
   return wrapField("Report type", input);
 }
 
+async function pentestAutoDraft() {
+  try {
+    const summary = await invoke("draft_pentest_summary", { engagement: state });
+    if (!summary) { setStatus("Add some findings first, then auto-draft."); return; }
+    if (state.executive_summary.trim()) {
+      setStatus("Executive summary already has content — clear it first to auto-draft.");
+      return;
+    }
+    state.executive_summary = summary;
+    rebuild();
+    schedule();
+    setStatus("Auto-drafted the executive summary from the findings. Review and edit.");
+  } catch (err) {
+    setStatus(String(err), true);
+  }
+}
+
 /* Penetration-test form: exec summary, scope, methodology, findings. */
 function pentestForm() {
   return el("div", {},
+    el("button", { class: "add", type: "button", onclick: pentestAutoDraft },
+      "✨ Auto-draft executive summary from findings"),
     field(state, "executive_summary", "Executive summary", "textarea"),
     field(state, "scope", "Scope", "textarea"),
     field(state, "methodology", "Methodology", "textarea"),

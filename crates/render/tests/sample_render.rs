@@ -106,6 +106,16 @@ fn autofill_drafts_from_sample_data() {
 }
 
 #[test]
+fn autofill_drafts_pentest_summary() {
+    let e: Engagement =
+        serde_json::from_str(include_str!("../fixtures/demo_pentest.json")).unwrap();
+    let s = intelscribe_core::autofill::draft_pentest_summary(&e);
+    assert!(s.contains("6 finding"), "{s}");
+    assert!(s.contains("critical"), "{s}");
+    assert!(s.contains("most significant finding"), "{s}");
+}
+
+#[test]
 fn pentest_report_renders() {
     let engagement: Engagement =
         serde_json::from_str(include_str!("../fixtures/demo_pentest.json"))
