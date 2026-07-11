@@ -106,6 +106,15 @@ const REPORT_KINDS = [
 
 const FINDING_STATUS = ["Open", "Remediated", "Risk Accepted", "Not Applicable"];
 
+const RISK_LIKELIHOOD = [
+  [0, "(not rated)"], [1, "1 — Rare"], [2, "2 — Unlikely"],
+  [3, "3 — Possible"], [4, "4 — Likely"], [5, "5 — Almost Certain"],
+];
+const RISK_IMPACT = [
+  [0, "(not rated)"], [1, "1 — Insignificant"], [2, "2 — Minor"],
+  [3, "3 — Moderate"], [4, "4 — Major"], [5, "5 — Severe"],
+];
+
 /* ---------- State ---------- */
 
 function defaultRegulatory() {
@@ -131,6 +140,7 @@ function defaultFinding() {
   return {
     title: "", severity: "Medium", cvss_vector: "", category: "", affected: "",
     description: "", impact: "", remediation: "", references: [], status: "Open",
+    likelihood: 0, impact_rating: 0,
   };
 }
 
@@ -206,6 +216,15 @@ function checkboxField(obj, key, label) {
   input.addEventListener("change", () => { obj[key] = input.checked; schedule(); });
   const wrap = el("label", { class: "check" }, input, document.createTextNode(" " + label));
   return el("div", { class: "field" }, wrap);
+}
+
+/* Numeric select storing a Number, from [value, label] option pairs. */
+function numSelectField(obj, key, label, options) {
+  const input = el("select");
+  for (const [v, t] of options) input.append(el("option", { value: String(v) }, t));
+  input.value = String(obj[key] ?? 0);
+  input.addEventListener("change", () => { obj[key] = parseInt(input.value, 10); schedule(); });
+  return wrapField(label, input);
 }
 
 /* Maturity-level select (ML0–ML3) that stores a Number, not a string. */
@@ -786,6 +805,8 @@ function pentestForm() {
         row(field(f, "severity", "Severity", "select", SEVERITIES),
             field(f, "status", "Status", "select", FINDING_STATUS)),
         row(field(f, "category", "Category"), field(f, "affected", "Affected assets")),
+        row(numSelectField(f, "likelihood", "Likelihood", RISK_LIKELIHOOD),
+            numSelectField(f, "impact_rating", "Consequence", RISK_IMPACT)),
         section("CVSS 3.1 severity", false, cvssBuilder(f)),
         field(f, "description", "Description", "textarea"),
         field(f, "impact", "Impact", "textarea"),

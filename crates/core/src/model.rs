@@ -70,6 +70,10 @@ pub struct Finding {
     pub references: Vec<String>,
     /// Remediation status: "Open", "Remediated", "Risk Accepted", etc.
     pub status: String,
+    /// Risk-matrix likelihood, 0 (unset) or 1–5 (Rare … Almost Certain).
+    pub likelihood: u8,
+    /// Risk-matrix consequence/impact rating, 0 (unset) or 1–5.
+    pub impact_rating: u8,
 }
 
 /// One row of an Essential Eight maturity assessment. Levels are 0–3.

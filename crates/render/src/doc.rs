@@ -404,6 +404,105 @@ fn evidence_section(s: &mut String, e: &Engagement, theme: &Theme) {
     }
 }
 
+/// Risk band from a likelihood×consequence product (1–25).
+fn risk_band<'a>(p: &'a Palette, likelihood: u8, impact: u8) -> (&'static str, &'a str) {
+    let product = likelihood as u32 * impact as u32;
+    if product >= 15 {
+        ("Extreme", &p.severity_critical)
+    } else if product >= 10 {
+        ("High", &p.severity_high)
+    } else if product >= 5 {
+        ("Medium", &p.severity_medium)
+    } else {
+        ("Low", &p.severity_low)
+    }
+}
+
+/// A 5×5 likelihood × consequence risk matrix plotting the findings.
+fn risk_matrix(s: &mut String, e: &Engagement, theme: &Theme) {
+    let p = &theme.palette;
+    let has_ratings = e
+        .findings
+        .iter()
+        .any(|f| (1..=5).contains(&f.likelihood) && (1..=5).contains(&f.impact_rating));
+    if !has_ratings {
+        return;
+    }
+
+    // Finding display numbers follow the severity-sorted order used elsewhere.
+    let mut order: Vec<usize> = (0..e.findings.len()).collect();
+    order.sort_by_key(|&i| severity_rank(e.findings[i].severity));
+    let mut display = vec![0usize; e.findings.len()];
+    for (pos, &i) in order.iter().enumerate() {
+        display[i] = pos + 1;
+    }
+    let mut cell_nums: std::collections::BTreeMap<(u8, u8), Vec<usize>> = std::collections::BTreeMap::new();
+    for (i, f) in e.findings.iter().enumerate() {
+        if (1..=5).contains(&f.likelihood) && (1..=5).contains(&f.impact_rating) {
+            cell_nums.entry((f.likelihood, f.impact_rating)).or_default().push(display[i]);
+        }
+    }
+
+    s.push_str("== Risk Matrix\n");
+    let _ = writeln!(
+        s,
+        "#text(size: 8.5pt, fill: rgb(\"{}\"), style: \"italic\")[Findings plotted by likelihood and consequence; cell colour indicates the assessed risk level.]\n",
+        p.muted
+    );
+
+    let impact_labels = ["Insignificant", "Minor", "Moderate", "Major", "Severe"];
+    let likelihood_labels = ["Rare", "Unlikely", "Possible", "Likely", "Almost Certain"];
+
+    let mut cells = String::new();
+    // Header row: corner + consequence labels.
+    let _ = writeln!(
+        cells,
+        "[#box(inset: 3pt)[#text(size: 6.5pt, fill: rgb(\"{}\"))[Likelihood ↓ / Consequence →]]],",
+        p.muted
+    );
+    for lbl in impact_labels {
+        let _ = writeln!(
+            cells,
+            "[#box(fill: rgb(\"{primary}\"), width: 100%, inset: (y: 5pt), radius: 2pt)[#align(center)[#text(fill: white, size: 7pt, weight: \"bold\")[{lbl}]]]],",
+            primary = p.primary,
+        );
+    }
+    // Likelihood rows, 5 (top) down to 1.
+    for l in (1..=5u8).rev() {
+        let _ = writeln!(
+            cells,
+            "[#box(width: 100%, inset: (y: 9pt))[#text(size: 7pt, weight: \"bold\")[{}]]],",
+            likelihood_labels[(l - 1) as usize]
+        );
+        for i in 1..=5u8 {
+            let (_, color) = risk_band(p, l, i);
+            let nums = cell_nums
+                .get(&(l, i))
+                .map(|v| v.iter().map(|n| format!("F{n}")).collect::<Vec<_>>().join(", "))
+                .unwrap_or_default();
+            let _ = writeln!(
+                cells,
+                "[#box(fill: rgb(\"{color}\"), width: 100%, inset: (y: 9pt), radius: 2pt)[#align(center)[#text(fill: white, size: 8.5pt, weight: \"bold\")[{nums}]]]],",
+            );
+        }
+    }
+    let _ = writeln!(
+        s,
+        "#block(breakable: false)[\n#table(columns: (78pt, 1fr, 1fr, 1fr, 1fr, 1fr), stroke: none, inset: 1.5pt, align: horizon,\n{cells})\n#v(4pt)\n#grid(columns: (auto, auto, auto, auto), gutter: 10pt,\n{l},\n{m},\n{h},\n{x})\n]\n",
+        cells = cells,
+        l = risk_legend(&p.severity_low, "Low"),
+        m = risk_legend(&p.severity_medium, "Medium"),
+        h = risk_legend(&p.severity_high, "High"),
+        x = risk_legend(&p.severity_critical, "Extreme"),
+    );
+}
+
+fn risk_legend(color: &str, label: &str) -> String {
+    format!(
+        "box[#box(fill: rgb(\"{color}\"), width: 9pt, height: 9pt, radius: 2pt) #text(size: 7.5pt)[{label}]]"
+    )
+}
+
 fn severity_rank(sev: intelscribe_core::model::Severity) -> u8 {
     use intelscribe_core::model::Severity::*;
     match sev {
@@ -427,6 +526,7 @@ fn pentest_body(s: &mut String, e: &Engagement, theme: &Theme) {
         let _ = writeln!(s, "{}\n", esc(e.executive_summary.trim()));
     }
     findings_summary(s, e, theme);
+    risk_matrix(s, e, theme);
 
     if !e.scope.trim().is_empty() {
         s.push_str("== Scope\n");

@@ -15,8 +15,9 @@ the binary, so it runs completely offline (airgap-friendly).
 ## Features
 
 - **Two report types** — an incident report and a penetration-test report
-  (findings-centric, with per-finding CVSS, remediation and retest status),
-  switched from a single dropdown; both share the cover, themes and CVSS engine.
+  (findings-centric, with per-finding CVSS, remediation, retest status and a
+  likelihood × consequence risk matrix), switched from a single dropdown; both
+  share the cover, themes and CVSS engine.
 - **Import a document or paste** — import a `.txt`, `.docx`, `.doc` or `.pdf`
   (e.g. an existing report) and run it through the same extraction, or paste raw
   logs, alert text, or a report section and extract everything in one click:

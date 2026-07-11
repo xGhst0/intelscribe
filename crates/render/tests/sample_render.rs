@@ -144,6 +144,8 @@ fn pentest_report_renders() {
         "Unauthenticated SQL injection",
         "= Scope",
         "Methodology",
+        "Risk Matrix",
+        "Almost Certain",
         "References — ACSC ISM",
         // ISM-1657 quoted in the critical finding's references.
         "Application control restricts the execution of executables",

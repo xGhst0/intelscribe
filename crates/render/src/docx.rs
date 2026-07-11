@@ -462,6 +462,32 @@ fn pentest_body(
         docx = docx.add_paragraph(h2("Methodology", primary)).add_paragraph(para(e.methodology.trim()));
     }
 
+    // Risk register (likelihood × consequence), if rated.
+    if e.findings.iter().any(|f| (1..=5).contains(&f.likelihood) && (1..=5).contains(&f.impact_rating)) {
+        let names = ["", "Rare/Insignificant", "Unlikely/Minor", "Possible/Moderate", "Likely/Major", "Almost Certain/Severe"];
+        docx = docx.add_paragraph(h2("Risk Ratings", primary));
+        let mut ord: Vec<usize> = (0..e.findings.len()).collect();
+        ord.sort_by_key(|&i| severity_rank(e.findings[i].severity));
+        let rows: Vec<Vec<TableCell>> = ord
+            .iter()
+            .enumerate()
+            .filter(|(_, &i)| (1..=5).contains(&e.findings[i].likelihood) && (1..=5).contains(&e.findings[i].impact_rating))
+            .map(|(n, &i)| {
+                let f = &e.findings[i];
+                let prod = f.likelihood as u32 * f.impact_rating as u32;
+                let band = if prod >= 15 { "Extreme" } else if prod >= 10 { "High" } else if prod >= 5 { "Medium" } else { "Low" };
+                vec![
+                    body_cell(&format!("F{}", n + 1)),
+                    body_cell(&f.title),
+                    body_cell(names.get(f.likelihood as usize).unwrap_or(&"")),
+                    body_cell(names.get(f.impact_rating as usize).unwrap_or(&"")),
+                    body_cell(band),
+                ]
+            })
+            .collect();
+        docx = docx.add_table(make_table(&["No.", "Finding", "Likelihood", "Consequence", "Risk"], rows, primary));
+    }
+
     docx = docx.add_paragraph(h1("Findings", primary));
     let mut order: Vec<usize> = (0..e.findings.len()).collect();
     order.sort_by_key(|&i| severity_rank(e.findings[i].severity));
