@@ -53,6 +53,9 @@ the binary, so it runs completely offline (airgap-friendly).
   release), updating as you edit.
 - **18 palettes × 7 procedural cover-art styles** — 100+ professional looks;
   all cover art is generated (no stock images, no licensing).
+- **Evidence vault** — attach files and screenshots; each is SHA-256 hashed for
+  integrity, images are embedded as numbered exhibits, and a chain-of-custody
+  Evidence Register (with hashes) is rendered in the report.
 - **Save / open & export** — save an engagement to a `.sok` project file (JSON)
   and reopen it later; export a themed **PDF** or an editable **Word (.docx)**
   document (for track-changes review) to `Desktop\IntelScribe Exports\`.
@@ -186,9 +189,9 @@ cargo run -p intelscribe-core --example build_packs
 - **M4 — in progress.** More report types. Penetration-test report done
   (findings with CVSS, remediation and status); threat hunt, threat-intel/actor
   profile and executive one-pager to follow.
-- **M5 — in progress.** IoC/host/timeline/detection auto-extraction, report
-  linter, `.sok` engagement files and DOCX export are done; evidence vault
-  (hashing, redaction) remains.
+- **M5 — done.** Auto-extraction (incl. document import), report linter, `.sok`
+  engagement files, DOCX export, and the evidence vault (SHA-256 hashing +
+  embedded exhibits).
 
 See [`docs/IDEAS.md`](docs/IDEAS.md) for the wider backlog.
 

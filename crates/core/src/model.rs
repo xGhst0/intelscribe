@@ -16,6 +16,9 @@ pub struct Engagement {
     /// Engagement-level ACSC Essential Eight maturity self-assessment.
     pub essential_eight: Vec<EssentialEightItem>,
 
+    /// Collected evidence (chain-of-custody register; images embedded).
+    pub evidence: Vec<Evidence>,
+
     /// Which report to produce: "" or "incident" (default) render the incident
     /// report; "pentest" renders the penetration-test report from the fields
     /// below.
@@ -28,6 +31,24 @@ pub struct Engagement {
     pub methodology: String,
     /// Pentest: the findings.
     pub findings: Vec<Finding>,
+}
+
+/// A collected evidence item for the chain-of-custody register.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct Evidence {
+    pub title: String,
+    pub filename: String,
+    /// SHA-256 hex digest of the file contents.
+    pub sha256: String,
+    pub size_bytes: u64,
+    /// When/where the evidence was collected (free text).
+    pub captured: String,
+    pub notes: String,
+    /// Base64-encoded file bytes for embedding (images under the size cap only).
+    pub image_data: String,
+    /// Original file extension for images, e.g. "png"; empty if not embedded.
+    pub image_ext: String,
 }
 
 /// A penetration-test finding.

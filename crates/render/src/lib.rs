@@ -3,7 +3,7 @@ mod doc;
 mod docx;
 mod world;
 
-pub use doc::build_source;
+pub use doc::{build_source, collect_assets};
 pub use docx::build_docx;
 
 use base64::Engine as _;
@@ -16,8 +16,11 @@ pub struct Preview {
     pub warnings: Vec<String>,
 }
 
-fn compile(source: &str) -> Result<(PagedDocument, Vec<String>), String> {
-    let world = world::IntelWorld::new(source.to_string());
+fn compile(
+    source: &str,
+    assets: Vec<(String, Vec<u8>)>,
+) -> Result<(PagedDocument, Vec<String>), String> {
+    let world = world::IntelWorld::new(source.to_string(), assets);
     let Warned { output, warnings } = typst::compile::<PagedDocument>(&world);
     let warnings = warnings.iter().map(|w| w.message.to_string()).collect();
     match output {
@@ -31,7 +34,15 @@ fn compile(source: &str) -> Result<(PagedDocument, Vec<String>), String> {
 }
 
 pub fn render_preview(source: &str, pixels_per_pt: f32) -> Result<Preview, String> {
-    let (doc, warnings) = compile(source)?;
+    render_preview_with_assets(source, Vec::new(), pixels_per_pt)
+}
+
+pub fn render_preview_with_assets(
+    source: &str,
+    assets: Vec<(String, Vec<u8>)>,
+    pixels_per_pt: f32,
+) -> Result<Preview, String> {
+    let (doc, warnings) = compile(source, assets)?;
     let mut pages = Vec::with_capacity(doc.pages.len());
     for page in &doc.pages {
         let pixmap = typst_render::render(page, pixels_per_pt);
@@ -42,7 +53,11 @@ pub fn render_preview(source: &str, pixels_per_pt: f32) -> Result<Preview, Strin
 }
 
 pub fn render_pdf(source: &str) -> Result<Vec<u8>, String> {
-    let (doc, _warnings) = compile(source)?;
+    render_pdf_with_assets(source, Vec::new())
+}
+
+pub fn render_pdf_with_assets(source: &str, assets: Vec<(String, Vec<u8>)>) -> Result<Vec<u8>, String> {
+    let (doc, _warnings) = compile(source, assets)?;
     typst_pdf::pdf(&doc, &typst_pdf::PdfOptions::default()).map_err(|errors| {
         errors
             .iter()

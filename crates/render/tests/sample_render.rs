@@ -19,9 +19,10 @@ fn sample_engagement_renders_across_all_themes() {
     let themes = theme::builtin_themes();
     assert!(themes.len() >= 18, "expected the full theme collection, got {}", themes.len());
 
+    let assets = intelscribe_render::collect_assets(&engagement);
     for theme in &themes {
         let src = intelscribe_render::build_source(&engagement, theme, &tpl, "auto");
-        let pdf = intelscribe_render::render_pdf(&src)
+        let pdf = intelscribe_render::render_pdf_with_assets(&src, assets.clone())
             .unwrap_or_else(|e| panic!("PDF render failed for theme {}: {e}", theme.name));
         assert!(pdf.len() > 10_000, "suspiciously small PDF for {}", theme.name);
     }
@@ -29,7 +30,7 @@ fn sample_engagement_renders_across_all_themes() {
     // Preview path (PNG pages) for a couple of themes.
     for theme in themes.iter().take(2) {
         let src = intelscribe_render::build_source(&engagement, theme, &tpl, "auto");
-        let preview = intelscribe_render::render_preview(&src, 1.0)
+        let preview = intelscribe_render::render_preview_with_assets(&src, assets.clone(), 1.0)
             .unwrap_or_else(|e| panic!("preview render failed for theme {}: {e}", theme.name));
         assert!(preview.pages.len() >= 5, "expected a multi-page report");
         assert!(
@@ -43,7 +44,7 @@ fn sample_engagement_renders_across_all_themes() {
     // Keep one PDF as an inspectable artifact.
     let theme = theme::get("Harbour Teal");
     let src = intelscribe_render::build_source(&engagement, &theme, &tpl, "auto");
-    let pdf = intelscribe_render::render_pdf(&src).unwrap();
+    let pdf = intelscribe_render::render_pdf_with_assets(&src, assets).unwrap();
     std::fs::write(artifacts_dir().join("sample.pdf"), &pdf).unwrap();
 }
 
@@ -73,9 +74,22 @@ fn generated_sections_appear() {
         "12 hours",
         "eligible data breach",
         "Essential Eight Maturity Assessment",
+        // Evidence vault.
+        "Evidence Register",
+        "SHA-256",
+        // The hash is chunked with linebreaks; the first 32 chars stay contiguous.
+        "2656370d2242461068675cb24a373cdf",
+        "image(\"/evidence/1.png\"",
     ] {
         assert!(src.contains(expected), "missing section: {expected}");
     }
+
+    // The embedded image must be served to Typst as a virtual asset and render.
+    let assets = intelscribe_render::collect_assets(&engagement);
+    assert_eq!(assets.len(), 1, "expected one embedded image asset");
+    assert_eq!(assets[0].0, "/evidence/1.png");
+    let pdf = intelscribe_render::render_pdf_with_assets(&src, assets).expect("evidence renders");
+    assert!(pdf.len() > 10_000);
 }
 
 #[test]
@@ -83,9 +97,10 @@ fn every_art_style_renders_without_warnings() {
     let engagement = sample();
     let tpl = template::incident_report();
     let theme = theme::get("Harbour Teal");
+    let assets = intelscribe_render::collect_assets(&engagement);
     for style in theme::ART_STYLES {
         let src = intelscribe_render::build_source(&engagement, &theme, &tpl, style);
-        let preview = intelscribe_render::render_preview(&src, 0.5)
+        let preview = intelscribe_render::render_preview_with_assets(&src, assets.clone(), 0.5)
             .unwrap_or_else(|e| panic!("render failed for art style {style}: {e}"));
         assert!(
             preview.warnings.is_empty(),

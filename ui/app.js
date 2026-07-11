@@ -28,6 +28,8 @@ function mockInvoke(cmd) {
       return null;
     case "list_projects":
       return [];
+    case "add_evidence":
+      return null;
     case "import_document":
       throw "Document import needs the IntelScribe desktop app.";
     case "export_docx":
@@ -141,10 +143,16 @@ function defaultEngagement() {
     client: "", analyst: "", analyst_title: "Security Analyst",
     date, version: "1.0", classification: "OFFICIAL: Sensitive",
     incidents: [defaultIncident()],
-    essential_eight: [],
+    essential_eight: [], evidence: [],
     report_kind: "incident", executive_summary: "", scope: "", methodology: "",
     findings: [],
   };
+}
+
+function humanSizeJS(b) {
+  if (b < 1024) return b + " B";
+  if (b < 1048576) return (b / 1024).toFixed(1) + " KB";
+  return (b / 1048576).toFixed(1) + " MB";
 }
 
 let state = defaultEngagement();
@@ -788,6 +796,50 @@ function pentestForm() {
   );
 }
 
+/* Evidence vault (engagement-level): attach files, hash them, edit metadata. */
+function evidenceSection() {
+  const wrap = el("div");
+  const listBox = el("div");
+  function renderList() {
+    listBox.innerHTML = "";
+    state.evidence.forEach((ev, idx) => {
+      const box = el("div", { class: "item" });
+      box.append(el("button", {
+        class: "remove", type: "button", title: "Remove",
+        onclick: () => { state.evidence.splice(idx, 1); renderList(); schedule(); },
+      }, "✕"));
+      const meta = `${ev.filename} · ${humanSizeJS(ev.size_bytes || 0)} · SHA-256 ${(ev.sha256 || "").slice(0, 20)}…` +
+        (ev.image_ext ? " · 🖼 embedded" : "");
+      box.append(
+        field(ev, "title", "Description"),
+        field(ev, "captured", "Collected (when / where)"),
+        field(ev, "notes", "Notes", "textarea"),
+        el("div", { class: "ism-preview" }, meta),
+      );
+      listBox.append(box);
+    });
+  }
+  renderList();
+  const add = el("button", { class: "add", type: "button", onclick: async () => {
+    setStatus("Select a file to attach…");
+    try {
+      const ev = await invoke("add_evidence");
+      if (ev) {
+        state.evidence.push(ev);
+        renderList();
+        schedule();
+        setStatus(`Attached ${ev.filename} — SHA-256 computed${ev.image_ext ? ", image embedded" : ""}.`);
+      } else {
+        setStatus("Attach cancelled.");
+      }
+    } catch (err) {
+      setStatus(String(err), true);
+    }
+  } }, "📎 Add evidence file (hashes it)");
+  wrap.append(listBox, add);
+  return wrap;
+}
+
 function rebuild() {
   const form = $("#form");
   form.innerHTML = "";
@@ -806,6 +858,7 @@ function rebuild() {
       field(state, "classification", "Classification marking"),
       reportKindField(),
     ),
+    section("Evidence (chain of custody)", false, evidenceSection()),
   );
 
   if ((state.report_kind || "incident") === "pentest") {

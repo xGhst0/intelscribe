@@ -33,7 +33,8 @@ async fn render_preview(
     art_style: String,
 ) -> Result<Preview, String> {
     let source = build_source(&engagement, &theme_name, &art_style);
-    let out = intelscribe_render::render_preview(&source, 1.5)?;
+    let assets = intelscribe_render::collect_assets(&engagement);
+    let out = intelscribe_render::render_preview_with_assets(&source, assets, 1.5)?;
     Ok(Preview {
         pages: out.pages,
         warnings: out.warnings,
@@ -58,7 +59,8 @@ async fn export_pdf(
     art_style: String,
 ) -> Result<String, String> {
     let source = build_source(&engagement, &theme_name, &art_style);
-    let bytes = intelscribe_render::render_pdf(&source)?;
+    let assets = intelscribe_render::collect_assets(&engagement);
+    let bytes = intelscribe_render::render_pdf_with_assets(&source, assets)?;
 
     let dir = export_dir();
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
@@ -343,6 +345,54 @@ fn read_document_text(path: &std::path::Path) -> Result<String, String> {
 }
 
 #[tauri::command(rename_all = "snake_case")]
+fn add_evidence() -> Result<Option<intelscribe_core::model::Evidence>, String> {
+    use base64::Engine as _;
+    use sha2::{Digest, Sha256};
+
+    let picked = rfd::FileDialog::new()
+        .add_filter(
+            "Evidence",
+            &[
+                "png", "jpg", "jpeg", "gif", "bmp", "webp", "pdf", "txt", "log", "csv", "docx",
+                "doc", "eml", "msg", "json", "xml", "zip", "pcap", "evtx",
+            ],
+        )
+        .add_filter("All files", &["*"])
+        .pick_file();
+    let Some(path) = picked else { return Ok(None) };
+
+    let bytes = std::fs::read(&path).map_err(|e| e.to_string())?;
+    let mut hasher = Sha256::new();
+    hasher.update(&bytes);
+    let sha256 = format!("{:x}", hasher.finalize());
+    let filename = path.file_name().and_then(|f| f.to_str()).unwrap_or("file").to_string();
+    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
+
+    // Embed images under a size cap so the project file stays manageable.
+    const EMBED_CAP: usize = 4_000_000;
+    let is_image = matches!(ext.as_str(), "png" | "jpg" | "jpeg" | "gif" | "bmp" | "webp");
+    let (image_data, image_ext) = if is_image && bytes.len() <= EMBED_CAP {
+        (
+            base64::engine::general_purpose::STANDARD.encode(&bytes),
+            ext.clone(),
+        )
+    } else {
+        (String::new(), String::new())
+    };
+
+    Ok(Some(intelscribe_core::model::Evidence {
+        title: filename.clone(),
+        filename,
+        sha256,
+        size_bytes: bytes.len() as u64,
+        captured: String::new(),
+        notes: String::new(),
+        image_data,
+        image_ext,
+    }))
+}
+
+#[tauri::command(rename_all = "snake_case")]
 fn import_document() -> Result<Option<String>, String> {
     let picked = rfd::FileDialog::new()
         .add_filter(
@@ -410,6 +460,7 @@ fn main() {
             list_projects,
             open_project,
             import_document,
+            add_evidence,
             search_techniques,
             search_ism,
             extract_iocs,

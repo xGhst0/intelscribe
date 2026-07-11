@@ -2533,12 +2533,14 @@ dependencies = [
 name = "intelscribe-app"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "intelscribe-core",
  "intelscribe-render",
  "pdf-extract",
  "rfd",
  "serde",
  "serde_json",
+ "sha2",
  "tauri",
  "tauri-build",
  "zip 2.4.2",

@@ -176,6 +176,7 @@ pub fn build_source(e: &Engagement, theme: &Theme, tpl: &ReportTemplate, art_sty
     // confidentiality, contacts) is shared by every report.
     if e.report_kind.trim().eq_ignore_ascii_case("pentest") {
         pentest_body(&mut s, e, theme);
+        evidence_section(&mut s, e, theme);
         return s;
     }
 
@@ -191,6 +192,7 @@ pub fn build_source(e: &Engagement, theme: &Theme, tpl: &ReportTemplate, art_sty
     }
 
     essential_eight_section(&mut s, e, theme);
+    evidence_section(&mut s, e, theme);
 
     s
 }
@@ -301,6 +303,105 @@ fn attack_matrix(s: &mut String, inc: &Incident, theme: &Theme) {
         s,
         "#grid(columns: (1fr, 1fr, 1fr, 1fr), gutter: 6pt, align: top,\n{cells})\n"
     );
+}
+
+fn human_size(bytes: u64) -> String {
+    const KB: f64 = 1024.0;
+    let b = bytes as f64;
+    if b < KB {
+        format!("{bytes} B")
+    } else if b < KB * KB {
+        format!("{:.1} KB", b / KB)
+    } else {
+        format!("{:.1} MB", b / (KB * KB))
+    }
+}
+
+/// Decode embedded evidence images into virtual assets the Typst world serves.
+/// Paths match those emitted by `evidence_section`.
+pub fn collect_assets(e: &Engagement) -> Vec<(String, Vec<u8>)> {
+    use base64::Engine as _;
+    let mut out = Vec::new();
+    for (i, ev) in e.evidence.iter().enumerate() {
+        if ev.image_data.is_empty() || ev.image_ext.is_empty() {
+            continue;
+        }
+        if let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(&ev.image_data) {
+            out.push((format!("/evidence/{}.{}", i + 1, ev.image_ext), bytes));
+        }
+    }
+    out
+}
+
+/// Evidence Register: a chain-of-custody table with SHA-256 integrity hashes,
+/// followed by embedded image exhibits.
+fn evidence_section(s: &mut String, e: &Engagement, theme: &Theme) {
+    let p = &theme.palette;
+    if e.evidence.is_empty() {
+        return;
+    }
+    let mono = esc_str(&theme.typography.mono_font);
+    s.push_str("#pagebreak()\n= Evidence Register\n");
+    let _ = writeln!(
+        s,
+        "#text(size: 8.5pt, fill: rgb(\"{}\"), style: \"italic\")[Collected evidence with SHA-256 integrity hashes. Exhibit numbers are referenced throughout the report.]\n",
+        p.muted
+    );
+
+    let mut rows = String::new();
+    for (i, ev) in e.evidence.iter().enumerate() {
+        let desc = if ev.title.trim().is_empty() { ev.filename.clone() } else { ev.title.clone() };
+        // Break the 64-char hash into 32-char lines so it wraps inside its cell.
+        let sha_chunks: Vec<String> = ev
+            .sha256
+            .chars()
+            .collect::<Vec<_>>()
+            .chunks(32)
+            .map(|c| c.iter().collect())
+            .collect();
+        let sha = sha_chunks.join("#linebreak()");
+        let _ = writeln!(
+            rows,
+            "[#text(weight: \"bold\")[{n}]], [{desc}#linebreak()#text(size: 7.5pt, fill: rgb(\"{muted}\"))[{notes}]], [#text(font: \"{mono}\", size: 7.5pt)[{file}]], [#text(size: 8pt)[{size}]], [#text(font: \"{mono}\", size: 6pt)[{sha}]], [#text(size: 8pt)[{cap}]],",
+            n = i + 1,
+            desc = esc(&desc),
+            muted = p.muted,
+            notes = esc(&ev.notes),
+            file = esc(&ev.filename),
+            size = human_size(ev.size_bytes),
+            sha = sha,
+            cap = esc(&ev.captured),
+        );
+    }
+    let _ = writeln!(
+        s,
+        "#table(columns: (30pt, 1fr, 0.85fr, 40pt, 122pt, 0.8fr), stroke: 0.5pt + rgb(\"{border}\"), inset: 5pt, fill: (x, y) => if y == 0 {{ rgb(\"{primary}\") }} else if calc.even(y) {{ rgb(\"{stripe}\") }} else {{ white }},\n{h1},\n{h2},\n{h3},\n{h4},\n{h5},\n{h6},\n{rows})\n",
+        h1 = table_header_cell("Ex."),
+        h2 = table_header_cell("Description"),
+        h3 = table_header_cell("Filename"),
+        h4 = table_header_cell("Size"),
+        h5 = table_header_cell("SHA-256"),
+        h6 = table_header_cell("Collected"),
+        border = p.table_border,
+        primary = p.primary,
+        stripe = p.stripe,
+        rows = rows,
+    );
+
+    // Embedded image exhibits.
+    for (i, ev) in e.evidence.iter().enumerate() {
+        if ev.image_data.is_empty() || ev.image_ext.is_empty() {
+            continue;
+        }
+        let caption = if ev.title.trim().is_empty() { ev.filename.clone() } else { ev.title.clone() };
+        let _ = writeln!(
+            s,
+            "#figure(image(\"/evidence/{n}.{ext}\", width: 88%), caption: [Exhibit {n} — {cap}])\n#v(6pt)",
+            n = i + 1,
+            ext = esc_str(&ev.image_ext),
+            cap = esc(&caption),
+        );
+    }
 }
 
 fn severity_rank(sev: intelscribe_core::model::Severity) -> u8 {

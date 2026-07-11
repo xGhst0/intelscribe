@@ -126,6 +126,7 @@ pub fn build_docx(e: &Engagement, theme: &Theme) -> Result<Vec<u8>, String> {
     } else {
         docx = incident_body(docx, e, theme, &primary, &ink, &muted);
     }
+    docx = evidence_register(docx, e, &primary, &muted);
 
     let mut buf = Vec::new();
     docx.build().pack(Cursor::new(&mut buf)).map_err(|err| err.to_string())?;
@@ -505,6 +506,50 @@ fn pentest_body(
     }
     let _ = muted;
     docx
+}
+
+fn human_size(bytes: u64) -> String {
+    const KB: f64 = 1024.0;
+    let b = bytes as f64;
+    if b < KB {
+        format!("{bytes} B")
+    } else if b < KB * KB {
+        format!("{:.1} KB", b / KB)
+    } else {
+        format!("{:.1} MB", b / (KB * KB))
+    }
+}
+
+fn evidence_register(mut docx: Docx, e: &Engagement, primary: &str, muted: &str) -> Docx {
+    if e.evidence.is_empty() {
+        return docx;
+    }
+    docx = docx.add_paragraph(h1("Evidence Register", primary));
+    docx = docx.add_paragraph(muted_italic(
+        "Collected evidence with SHA-256 integrity hashes.",
+        muted,
+    ));
+    let rows: Vec<Vec<TableCell>> = e
+        .evidence
+        .iter()
+        .enumerate()
+        .map(|(i, ev)| {
+            let desc = if ev.title.trim().is_empty() { &ev.filename } else { &ev.title };
+            vec![
+                body_cell(&format!("{}", i + 1)),
+                body_cell(desc),
+                mono_cell(&ev.filename),
+                body_cell(&human_size(ev.size_bytes)),
+                mono_cell(&ev.sha256),
+                body_cell(&ev.captured),
+            ]
+        })
+        .collect();
+    docx.add_table(make_table(
+        &["Ex.", "Description", "Filename", "Size", "SHA-256", "Collected"],
+        rows,
+        primary,
+    ))
 }
 
 fn severity_rank(sev: Severity) -> u8 {

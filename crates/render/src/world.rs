@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use typst::diag::{FileError, FileResult};
 use typst::foundations::{Bytes, Datetime};
 use typst::syntax::{FileId, Source, VirtualPath};
@@ -6,17 +8,18 @@ use typst::utils::LazyHash;
 use typst::{Library, World};
 
 /// A minimal, fully in-memory Typst world: one generated main source, the
-/// fonts bundled with typst-assets, and nothing on disk. This is what keeps
-/// rendering completely offline.
+/// fonts bundled with typst-assets, and a set of virtual binary assets
+/// (embedded evidence images). Nothing is read from disk — fully offline.
 pub struct IntelWorld {
     library: LazyHash<Library>,
     book: LazyHash<FontBook>,
     fonts: Vec<Font>,
     main: Source,
+    assets: HashMap<FileId, Bytes>,
 }
 
 impl IntelWorld {
-    pub fn new(source: String) -> Self {
+    pub fn new(source: String, assets: Vec<(String, Vec<u8>)>) -> Self {
         let mut fonts = Vec::new();
         for data in typst_assets::fonts() {
             let bytes = Bytes::new(data);
@@ -28,11 +31,18 @@ impl IntelWorld {
         }
         let book = FontBook::from_fonts(&fonts);
         let main_id = FileId::new(None, VirtualPath::new("/main.typ"));
+        let assets = assets
+            .into_iter()
+            .map(|(path, bytes)| {
+                (FileId::new(None, VirtualPath::new(&path)), Bytes::new(bytes))
+            })
+            .collect();
         Self {
             library: LazyHash::new(Library::builder().build()),
             book: LazyHash::new(book),
             fonts,
             main: Source::new(main_id, source),
+            assets,
         }
     }
 }
@@ -59,7 +69,10 @@ impl World for IntelWorld {
     }
 
     fn file(&self, id: FileId) -> FileResult<Bytes> {
-        Err(FileError::NotFound(id.vpath().as_rootless_path().into()))
+        self.assets
+            .get(&id)
+            .cloned()
+            .ok_or_else(|| FileError::NotFound(id.vpath().as_rootless_path().into()))
     }
 
     fn font(&self, index: usize) -> Option<Font> {

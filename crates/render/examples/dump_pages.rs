@@ -18,7 +18,8 @@ fn main() {
     let tpl = template::incident_report();
     let theme = theme::get(theme_name);
     let src = intelscribe_render::build_source(&engagement, &theme, &tpl, art);
-    let preview = intelscribe_render::render_preview(&src, 1.4).expect("render");
+    let assets = intelscribe_render::collect_assets(&engagement);
+    let preview = intelscribe_render::render_preview_with_assets(&src, assets, 1.4).expect("render");
 
     let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/test-artifacts");
     std::fs::create_dir_all(&dir).unwrap();
