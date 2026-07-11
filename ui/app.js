@@ -699,7 +699,7 @@ function incidentSection(inc, idx) {
     section("Timeline events", false, itemList(inc.events, (box, ev) => {
       box.append(
         row(
-          field(ev, "timestamp", "Time (sortable, e.g. 03:38:10)"),
+          field(ev, "timestamp", "Time (dd-mm-yy hh:mm:ss)"),
           field(ev, "host", "Host"),
         ),
         field(ev, "phase", "Kill-chain phase", "select", PHASES),

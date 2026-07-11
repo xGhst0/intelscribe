@@ -118,6 +118,12 @@ fn defang_email(s: &str) -> String {
     s.replace('@', "[@]").replace('.', "[.]")
 }
 
+/// Strip trailing sentence punctuation that a regex greedily swept up from
+/// surrounding prose (e.g. a path ending in `).` or `,`).
+fn trim_trailing_punct(s: &str) -> &str {
+    s.trim_end_matches(|c: char| ").,;:'\"]}>".contains(c))
+}
+
 /// Blank out `[start, end)` in a byte buffer with spaces (preserving length so
 /// later regex offsets stay valid).
 fn blank(buf: &mut Vec<u8>, start: usize, end: usize) {
@@ -170,13 +176,13 @@ pub fn extract_iocs(input: &str) -> Vec<Ioc> {
     };
 
     // Priority order: broad/composite indicators first.
-    pass(&p.url, &mut out, &|m, out| push(defang_network(m), "URL", out));
+    pass(&p.url, &mut out, &|m, out| push(defang_network(trim_trailing_punct(m)), "URL", out));
     pass(&p.email, &mut out, &|m, out| push(defang_email(m), "Email Address", out));
     pass(&p.sha256, &mut out, &|m, out| push(m.to_lowercase(), "Hash", out));
     pass(&p.sha1, &mut out, &|m, out| push(m.to_lowercase(), "Hash", out));
     pass(&p.md5, &mut out, &|m, out| push(m.to_lowercase(), "Hash", out));
-    pass(&p.registry, &mut out, &|m, out| push(m.trim().to_string(), "Registry Key", out));
-    pass(&p.win_path, &mut out, &|m, out| push(m.trim().to_string(), "File Path", out));
+    pass(&p.registry, &mut out, &|m, out| push(trim_trailing_punct(m).to_string(), "Registry Key", out));
+    pass(&p.win_path, &mut out, &|m, out| push(trim_trailing_punct(m).to_string(), "File Path", out));
     pass(&p.ipv4, &mut out, &|m, out| push(defang_ip_or_domain(m), "IPv4", out));
     pass(&p.domain, &mut out, &|m, out| {
         let tld = last_label(m);
@@ -265,6 +271,17 @@ fn is_ipv4(s: &str) -> bool {
     hp.ipv4.is_match(s) && s.chars().all(|c| c.is_ascii_digit() || c == '.')
 }
 
+/// Tokens that look host-like but are tools, protocols or filler words rather
+/// than computer names.
+const NON_HOST: &[&str] = &[
+    "wmic", "psexec", "psexesvc", "whoami", "powershell", "powershell_ise", "cmd", "iex",
+    "rundll32", "regsvr32", "svchost", "lsass", "schtasks", "setspn", "mimikatz", "sharphound",
+    "bloodhound", "certutil", "bitsadmin", "at", "on", "in", "to", "by", "the", "and", "for",
+    "net", "reg", "sc", "http", "https", "ftp", "ldap", "smb", "rdp", "dns", "tcp", "udp", "rc4",
+    "aes", "ntlm", "result", "query", "image", "user", "host", "data", "source", "winword",
+    "excel", "outlook", "explorer", "rundll",
+];
+
 /// All host mentions on a single (already refanged) line, in reading order.
 fn hosts_on_line(line: &str) -> Vec<HostHit> {
     let hp = host_patterns();
@@ -273,7 +290,7 @@ fn hosts_on_line(line: &str) -> Vec<HostHit> {
 
     let push = |name: &str, ip: &str, matched: &str, hits: &mut Vec<HostHit>, seen: &mut Vec<String>| {
         let name = name.trim();
-        if name.len() < 2 || is_ipv4(name) {
+        if name.len() < 2 || is_ipv4(name) || NON_HOST.contains(&name.to_ascii_lowercase().as_str()) {
             return;
         }
         let key = name.to_lowercase();
@@ -345,16 +362,89 @@ pub fn extract_hosts(input: &str) -> Vec<Host> {
 // Timeline event extraction
 // ---------------------------------------------------------------------------
 
-fn timestamp_patterns() -> &'static (Regex, Regex) {
-    static P: OnceLock<(Regex, Regex)> = OnceLock::new();
-    P.get_or_init(|| {
-        (
-            // ISO / full datetime, preferred.
-            Regex::new(r"\b\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.\d+)?Z?\b").unwrap(),
-            // Bare clock time.
-            Regex::new(r"\b\d{1,2}:\d{2}(?::\d{2})?\b").unwrap(),
+struct TsPatterns {
+    iso: Regex,
+    dmy: Regex,
+    clock: Regex,
+}
+
+fn ts_patterns() -> &'static TsPatterns {
+    static P: OnceLock<TsPatterns> = OnceLock::new();
+    P.get_or_init(|| TsPatterns {
+        // ISO / full datetime: 2026-03-14 09:12:05
+        iso: Regex::new(r"\b(\d{4})-(\d{2})-(\d{2})[ T](\d{1,2}):(\d{2})(?::(\d{2}))?").unwrap(),
+        // Day-month-year: 14-03-2026 09:12:05 or 14/03/26 9:12
+        dmy: Regex::new(
+            r"\b(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})(?:[ T,]+|\s+at\s+)(\d{1,2}):(\d{2})(?::(\d{2}))?",
         )
+        .unwrap(),
+        // Bare clock: 03:38:40 or 03:40
+        clock: Regex::new(r"\b(\d{1,2}):(\d{2})(?::(\d{2}))?\b").unwrap(),
     })
+}
+
+fn valid_hms(h: u32, m: u32, s: u32) -> bool {
+    h < 24 && m < 60 && s < 60
+}
+
+fn two_digit_year(y: u32) -> u32 {
+    if y >= 100 {
+        y % 100
+    } else {
+        y
+    }
+}
+
+/// Find the first valid timestamp on a line, returning its byte range and a
+/// normalised form: `dd-mm-yy hh:mm:ss` when a date is present, else `hh:mm:ss`.
+fn find_timestamp(line: &str) -> Option<(std::ops::Range<usize>, String)> {
+    let p = ts_patterns();
+
+    let grab = |c: &regex::Captures, hi: usize, mi: usize, si: usize| -> Option<(u32, u32, u32)> {
+        let h: u32 = c.get(hi)?.as_str().parse().ok()?;
+        let m: u32 = c.get(mi)?.as_str().parse().ok()?;
+        let s: u32 = c.get(si).map(|x| x.as_str().parse().unwrap_or(0)).unwrap_or(0);
+        valid_hms(h, m, s).then_some((h, m, s))
+    };
+
+    if let Some(c) = p.iso.captures(line) {
+        if let Some((h, m, s)) = grab(&c, 4, 5, 6) {
+            let (y, mo, d) = (
+                c[1].parse::<u32>().unwrap_or(0),
+                c[2].parse::<u32>().unwrap_or(0),
+                c[3].parse::<u32>().unwrap_or(0),
+            );
+            let mm = c.get(0).unwrap();
+            return Some((
+                mm.start()..mm.end(),
+                format!("{:02}-{:02}-{:02} {:02}:{:02}:{:02}", d, mo, two_digit_year(y), h, m, s),
+            ));
+        }
+    }
+    if let Some(c) = p.dmy.captures(line) {
+        if let Some((h, m, s)) = grab(&c, 4, 5, 6) {
+            let (d, mo, y) = (
+                c[1].parse::<u32>().unwrap_or(0),
+                c[2].parse::<u32>().unwrap_or(0),
+                c[3].parse::<u32>().unwrap_or(0),
+            );
+            if d <= 31 && mo <= 12 {
+                let mm = c.get(0).unwrap();
+                return Some((
+                    mm.start()..mm.end(),
+                    format!("{:02}-{:02}-{:02} {:02}:{:02}:{:02}", d, mo, two_digit_year(y), h, m, s),
+                ));
+            }
+        }
+    }
+    // Bare clock — first range-valid match on the line.
+    for c in p.clock.captures_iter(line) {
+        if let Some((h, m, s)) = grab(&c, 1, 2, 3) {
+            let mm = c.get(0).unwrap();
+            return Some((mm.start()..mm.end(), format!("{:02}:{:02}:{:02}", h, m, s)));
+        }
+    }
+    None
 }
 
 fn guess_phase(desc: &str) -> Phase {
@@ -395,30 +485,33 @@ fn clean_description(s: &str) -> String {
 /// best-effort kill-chain phase (all editable afterwards).
 pub fn extract_events(input: &str) -> Vec<TimelineEvent> {
     let text = refang(input);
-    let (dt, clock) = timestamp_patterns();
     let mut out: Vec<TimelineEvent> = Vec::new();
 
     for line in text.lines() {
-        let ts_match = dt.find(line).or_else(|| clock.find(line));
-        let Some(ts) = ts_match else { continue };
-        let timestamp = ts.as_str().to_string();
+        let Some((range, timestamp)) = find_timestamp(line) else { continue };
 
-        // Build the description by removing the timestamp and the host token.
-        let mut desc = line.replacen(&timestamp, " ", 1);
-        let host = hosts_on_line(line).into_iter().next();
-        let host_name = if let Some(h) = &host {
-            desc = desc.replacen(&h.matched, " ", 1);
-            h.name.clone()
+        let hosts = hosts_on_line(line);
+        let host_name = hosts.first().map(|h| h.name.clone()).unwrap_or_default();
+
+        // If the timestamp leads the line it is a log entry — strip the
+        // timestamp and host to leave the message. Otherwise the line is prose
+        // (the time sits mid-sentence), so keep the whole sentence readable.
+        let leading_ws = line.len() - line.trim_start().len();
+        let description = if range.start <= leading_ws + 2 {
+            let raw = &line[range.clone()];
+            let mut d = line.replacen(raw, " ", 1);
+            if let Some(h) = hosts.first() {
+                d = d.replacen(&h.matched, " ", 1);
+            }
+            clean_description(&d)
         } else {
-            String::new()
+            clean_description(line)
         };
-        let description = clean_description(&desc);
-        if description.is_empty() {
+        if description.chars().count() < 12 {
             continue;
         }
 
-        let key = (timestamp.clone(), description.clone());
-        if out.iter().any(|e| e.timestamp == key.0 && e.description == key.1) {
+        if out.iter().any(|e| e.timestamp == timestamp && e.description == description) {
             continue;
         }
         out.push(TimelineEvent {
@@ -701,6 +794,33 @@ Result: The attacker used two remote-execution techniques to move between hosts.
         assert!(events[0].description.contains("macro"));
         // Timestamp and host must be stripped from the description.
         assert!(!events[0].description.contains("2026-03-14"));
+    }
+
+    #[test]
+    fn rejects_invalid_times_and_normalises() {
+        // "25:80" inside 18.207.78.25:80 must not become a timeline event.
+        assert!(extract_events("Beacon to 18.207.78.25:80/officeupdate over HTTP").is_empty());
+        // dd-mm-yyyy datetime normalises to dd-mm-yy hh:mm:ss.
+        let e2 = extract_events("14-03-2026 09:12:05 workstation dumped lsass memory");
+        assert_eq!(e2.len(), 1);
+        assert_eq!(e2[0].timestamp, "14-03-26 09:12:05");
+        // Bare clock pads seconds; prose keeps the sentence readable.
+        let e3 = extract_events("At 03:40 the collector started enumerating the domain");
+        assert_eq!(e3[0].timestamp, "03:40:00");
+        assert!(e3[0].description.to_lowercase().contains("collector started"));
+    }
+
+    #[test]
+    fn trims_trailing_punctuation_on_paths() {
+        let iocs = extract_iocs("dropped C:\\ProgramData\\Analytics.exe).");
+        assert!(indicators(&iocs, "File Path").contains(&"C:\\ProgramData\\Analytics.exe".to_string()),
+            "{:?}", indicators(&iocs, "File Path"));
+    }
+
+    #[test]
+    fn tool_tokens_are_not_hosts() {
+        let hosts = extract_hosts("18:32:35 WMIC /node:10.0.0.216 process call create x.exe");
+        assert!(!hosts.iter().any(|h| h.name.eq_ignore_ascii_case("wmic")), "{hosts:?}");
     }
 
     #[test]
