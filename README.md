@@ -17,8 +17,10 @@ the binary, so it runs completely offline (airgap-friendly).
 - **Two report types** — an incident report and a penetration-test report
   (findings-centric, with per-finding CVSS, remediation and retest status),
   switched from a single dropdown; both share the cover, themes and CVSS engine.
-- **Paste-to-extract & auto-mapping** — paste raw logs, alert text, or an
-  existing report section and extract everything in one click: defanged IoCs
+- **Import a document or paste** — import a `.txt`, `.docx`, `.doc` or `.pdf`
+  (e.g. an existing report) and run it through the same extraction, or paste raw
+  logs, alert text, or a report section and extract everything in one click:
+  defanged IoCs
   (IPs, URLs, domains, hashes, paths, registry keys, emails), affected hosts
   (name + IP), timeline events (timestamp, host, description, guessed kill-chain
   phase), structured detections (`Detection N: … / Data source / Query /

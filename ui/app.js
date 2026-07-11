@@ -28,6 +28,8 @@ function mockInvoke(cmd) {
       return null;
     case "list_projects":
       return [];
+    case "import_document":
+      throw "Document import needs the IntelScribe desktop app.";
     case "export_docx":
       throw "DOCX export needs the IntelScribe desktop app.";
     case "search_techniques":
@@ -530,10 +532,9 @@ function quickImport(inc) {
     }
   }
 
-  async function extractEverything() {
-    if (!text()) { setStatus("Paste some text into the import box first."); return; }
+  async function runAll(t) {
+    if (!t || !t.trim()) { setStatus("No text to extract from."); return; }
     try {
-      const t = text();
       const [iocs, hosts, events, dets, techs] = await Promise.all([
         invoke("extract_iocs", { text: t }),
         invoke("extract_hosts", { text: t }),
@@ -554,12 +555,32 @@ function quickImport(inc) {
     }
   }
 
+  function extractEverything() {
+    if (!text()) { setStatus("Paste some text into the import box first."); return; }
+    runAll(text());
+  }
+
+  async function importFile() {
+    setStatus("Reading document…");
+    try {
+      const t = await invoke("import_document");
+      if (t === null) { setStatus("Import cancelled."); return; }
+      if (!t.trim()) { setStatus("No readable text found in that file."); return; }
+      ta.value = t;
+      await runAll(t);
+    } catch (err) {
+      setStatus(String(err), true);
+    }
+  }
+
   wrap.append(
     el("div", { class: "import-hint" },
-      "Paste SIEM output, command results, notes, or a report section — IntelScribe extracts what it can, then you review."),
+      "Import a document (.txt, .docx, .doc, .pdf) or paste text — IntelScribe extracts what it can, then you review."),
+    el("button", { class: "add import-primary", type: "button", onclick: importFile },
+      "📄 Import document → extract"),
     ta,
     el("button", { class: "add import-primary", type: "button", onclick: extractEverything },
-      "⚡ Extract everything"),
+      "⚡ Extract everything from paste"),
     el("div", { class: "import-grid" },
       el("button", { class: "add", type: "button",
         onclick: () => run("extract_hosts", mergeHosts, "Host extraction") }, "🖥 Hosts"),

@@ -13,3 +13,5 @@ tauri = { version = "2", features = [] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 rfd = "0.15"
+zip = "2"
+pdf-extract = "0.7"

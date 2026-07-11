@@ -240,6 +240,123 @@ fn open_engagement() -> Result<Option<Engagement>, String> {
     }
 }
 
+/// Extract visible text from a .docx (a zip of XML). Paragraph and break tags
+/// become newlines; all other tags are stripped.
+fn docx_to_text(bytes: &[u8]) -> Result<String, String> {
+    use std::io::Read;
+    let mut zip = zip::ZipArchive::new(std::io::Cursor::new(bytes)).map_err(|e| e.to_string())?;
+    let mut xml = String::new();
+    zip.by_name("word/document.xml")
+        .map_err(|_| "not a Word document (no word/document.xml)".to_string())?
+        .read_to_string(&mut xml)
+        .map_err(|e| e.to_string())?;
+
+    let xml = xml
+        .replace("</w:p>", "\n")
+        .replace("<w:br/>", "\n")
+        .replace("<w:br />", "\n")
+        .replace("<w:tab/>", "\t");
+    let mut out = String::with_capacity(xml.len() / 2);
+    let mut in_tag = false;
+    for ch in xml.chars() {
+        match ch {
+            '<' => in_tag = true,
+            '>' => in_tag = false,
+            c if !in_tag => out.push(c),
+            _ => {}
+        }
+    }
+    Ok(out
+        .replace("&amp;", "&")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace("&apos;", "'"))
+}
+
+/// Best-effort text from a legacy binary .doc: extract runs of printable
+/// characters, trying both single-byte and UTF-16LE encodings.
+fn doc_strings(bytes: &[u8]) -> String {
+    fn printable(b: u8) -> bool {
+        b == b'\n' || b == b'\r' || b == b'\t' || (0x20..=0x7e).contains(&b)
+    }
+    fn ascii_runs(bytes: &[u8]) -> String {
+        let mut out = String::new();
+        let mut run = String::new();
+        for &b in bytes {
+            if printable(b) {
+                run.push(b as char);
+            } else {
+                if run.trim().len() >= 4 {
+                    out.push_str(run.trim());
+                    out.push('\n');
+                }
+                run.clear();
+            }
+        }
+        if run.trim().len() >= 4 {
+            out.push_str(run.trim());
+        }
+        out
+    }
+    fn utf16_runs(bytes: &[u8]) -> String {
+        let mut out = String::new();
+        let mut run = String::new();
+        let mut i = 0;
+        while i + 1 < bytes.len() {
+            let (lo, hi) = (bytes[i], bytes[i + 1]);
+            if hi == 0 && printable(lo) {
+                run.push(lo as char);
+            } else {
+                if run.trim().len() >= 4 {
+                    out.push_str(run.trim());
+                    out.push('\n');
+                }
+                run.clear();
+            }
+            i += 2;
+        }
+        if run.trim().len() >= 4 {
+            out.push_str(run.trim());
+        }
+        out
+    }
+    let a = ascii_runs(bytes);
+    let u = utf16_runs(bytes);
+    if u.len() > a.len() {
+        u
+    } else {
+        a
+    }
+}
+
+fn read_document_text(path: &std::path::Path) -> Result<String, String> {
+    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
+    let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
+    Ok(match ext.as_str() {
+        "docx" => docx_to_text(&bytes)?,
+        "doc" => doc_strings(&bytes),
+        "pdf" => pdf_extract::extract_text_from_mem(&bytes)
+            .map_err(|e| format!("Could not read PDF: {e}"))?,
+        _ => String::from_utf8_lossy(&bytes).into_owned(),
+    })
+}
+
+#[tauri::command(rename_all = "snake_case")]
+fn import_document() -> Result<Option<String>, String> {
+    let picked = rfd::FileDialog::new()
+        .add_filter(
+            "Documents",
+            &["txt", "log", "csv", "tsv", "md", "text", "json", "xml", "docx", "doc", "pdf"],
+        )
+        .add_filter("All files", &["*"])
+        .pick_file();
+    match picked {
+        Some(path) => Ok(Some(read_document_text(&path)?)),
+        None => Ok(None),
+    }
+}
+
 fn export_dir() -> PathBuf {
     std::env::var_os("USERPROFILE")
         .map(PathBuf::from)
@@ -273,6 +390,16 @@ fn sanitize_filename(name: &str) -> String {
 }
 
 fn main() {
+    // Hidden CLI: `intelscribe-app --extract <file>` prints the extracted text.
+    let args: Vec<String> = std::env::args().collect();
+    if args.len() >= 3 && args[1] == "--extract" {
+        match read_document_text(std::path::Path::new(&args[2])) {
+            Ok(text) => print!("{text}"),
+            Err(e) => eprintln!("error: {e}"),
+        }
+        return;
+    }
+
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
             render_preview,
@@ -282,6 +409,7 @@ fn main() {
             open_engagement,
             list_projects,
             open_project,
+            import_document,
             search_techniques,
             search_ism,
             extract_iocs,
