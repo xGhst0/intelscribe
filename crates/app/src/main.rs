@@ -187,6 +187,42 @@ fn save_engagement(engagement: Engagement) -> Result<Option<String>, String> {
     }
 }
 
+#[derive(Serialize)]
+struct ProjectInfo {
+    name: String,
+    path: String,
+}
+
+#[tauri::command(rename_all = "snake_case")]
+fn list_projects() -> Vec<ProjectInfo> {
+    let mut entries: Vec<(std::time::SystemTime, ProjectInfo)> = Vec::new();
+    if let Ok(rd) = std::fs::read_dir(projects_dir()) {
+        for e in rd.flatten() {
+            let path = e.path();
+            if path.extension().and_then(|x| x.to_str()) == Some("sok") {
+                let modified = e
+                    .metadata()
+                    .and_then(|m| m.modified())
+                    .unwrap_or(std::time::UNIX_EPOCH);
+                let name = path
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("report")
+                    .to_string();
+                entries.push((modified, ProjectInfo { name, path: path.display().to_string() }));
+            }
+        }
+    }
+    entries.sort_by(|a, b| b.0.cmp(&a.0));
+    entries.into_iter().take(12).map(|(_, p)| p).collect()
+}
+
+#[tauri::command(rename_all = "snake_case")]
+fn open_project(path: String) -> Result<Engagement, String> {
+    let text = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    serde_json::from_str(&text).map_err(|e| format!("Not a valid .sok file: {e}"))
+}
+
 #[tauri::command(rename_all = "snake_case")]
 fn open_engagement() -> Result<Option<Engagement>, String> {
     let picked = rfd::FileDialog::new()
@@ -244,6 +280,8 @@ fn main() {
             export_docx,
             save_engagement,
             open_engagement,
+            list_projects,
+            open_project,
             search_techniques,
             search_ism,
             extract_iocs,

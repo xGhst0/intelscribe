@@ -23,8 +23,11 @@ function mockInvoke(cmd) {
       return { attack_version: "—", ism_version: "—", technique_count: 0 };
     case "save_engagement":
     case "open_engagement":
+    case "open_project":
     case "draft_pentest_summary":
       return null;
+    case "list_projects":
+      return [];
     case "export_docx":
       throw "DOCX export needs the IntelScribe desktop app.";
     case "search_techniques":
@@ -904,7 +907,25 @@ async function init() {
   $("#btn-save").addEventListener("click", async () => {
     try {
       const path = await invoke("save_engagement", { engagement: state });
-      if (path) setStatus("Saved: " + path);
+      if (path) { setStatus("Saved: " + path); refreshRecent(); }
+    } catch (err) {
+      setStatus(String(err), true);
+    }
+  });
+
+  const recentSelect = $("#recent-select");
+  recentSelect.addEventListener("change", async () => {
+    const path = recentSelect.value;
+    recentSelect.value = "";
+    if (!path) return;
+    try {
+      const engagement = await invoke("open_project", { path });
+      if (engagement) {
+        state = engagement;
+        rebuild();
+        renderPreview();
+        setStatus("Opened " + (state.title || "report") + ".");
+      }
     } catch (err) {
       setStatus(String(err), true);
     }
@@ -960,8 +981,23 @@ async function init() {
 
   refreshTechList("");
   refreshIsmList("");
+  refreshRecent();
   rebuild();
   renderPreview();
+}
+
+async function refreshRecent() {
+  const sel = $("#recent-select");
+  if (!sel) return;
+  try {
+    const projects = await invoke("list_projects");
+    sel.innerHTML = "";
+    sel.append(el("option", { value: "" }, "Recent…"));
+    for (const p of projects) sel.append(el("option", { value: p.path }, p.name));
+    sel.style.display = projects.length ? "" : "none";
+  } catch (_) {
+    sel.style.display = "none";
+  }
 }
 
 init();
