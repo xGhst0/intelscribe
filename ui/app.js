@@ -68,7 +68,7 @@ const PHASES = [
 const IOC_TYPES = [
   "IPv4 (C2)", "IPv4", "Domain", "URL", "Filename", "File Path", "Hash",
   "Command Line", "Registry Key", "Named Pipe", "Named-Pipe Pattern",
-  "Windows Service", "Scheduled Task", "Email Address", "Other",
+  "Windows Service", "Scheduled Task", "Email Address", "CVE", "Other",
 ];
 
 const ACSC_CATEGORIES = [

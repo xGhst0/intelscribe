@@ -52,6 +52,7 @@ const COMMON_TLDS: &[&str] = &[
 struct Patterns {
     url: Regex,
     email: Regex,
+    cve: Regex,
     sha256: Regex,
     sha1: Regex,
     md5: Regex,
@@ -66,6 +67,7 @@ fn patterns() -> &'static Patterns {
     P.get_or_init(|| Patterns {
         url: Regex::new(r#"(?i)\b(?:https?|ftp)://[^\s<>"'\)\]\}]+"#).unwrap(),
         email: Regex::new(r"\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b").unwrap(),
+        cve: Regex::new(r"(?i)\bCVE-\d{4}-\d{4,7}\b").unwrap(),
         sha256: Regex::new(r"\b[A-Fa-f0-9]{64}\b").unwrap(),
         sha1: Regex::new(r"\b[A-Fa-f0-9]{40}\b").unwrap(),
         md5: Regex::new(r"\b[A-Fa-f0-9]{32}\b").unwrap(),
@@ -178,6 +180,7 @@ pub fn extract_iocs(input: &str) -> Vec<Ioc> {
     // Priority order: broad/composite indicators first.
     pass(&p.url, &mut out, &|m, out| push(defang_network(trim_trailing_punct(m)), "URL", out));
     pass(&p.email, &mut out, &|m, out| push(defang_email(m), "Email Address", out));
+    pass(&p.cve, &mut out, &|m, out| push(m.to_uppercase(), "CVE", out));
     pass(&p.sha256, &mut out, &|m, out| push(m.to_lowercase(), "Hash", out));
     pass(&p.sha1, &mut out, &|m, out| push(m.to_lowercase(), "Hash", out));
     pass(&p.md5, &mut out, &|m, out| push(m.to_lowercase(), "Hash", out));
@@ -217,6 +220,8 @@ struct HostPatterns {
     /// A host-like token immediately following a leading timestamp
     /// (the common `TIMESTAMP HOST message` column layout).
     lead_host: Regex,
+    /// A host named after a keyword: `server SWDEV12`, `host DC01`, `on WKS-1`.
+    kw_host: Regex,
     ipv4: Regex,
 }
 
@@ -238,6 +243,10 @@ fn host_patterns() -> &'static HostPatterns {
         .unwrap(),
         lead_host: Regex::new(
             r"(?i)^\s*(?:\d{4}-\d{2}-\d{2}[ t]\d{2}:\d{2}:\d{2}\S*|\d{1,2}:\d{2}(?::\d{2})?)\s+([A-Za-z][A-Za-z0-9._-]{1,30})\b",
+        )
+        .unwrap(),
+        kw_host: Regex::new(
+            r"(?i)\b(?:server|host(?:name)?|workstation|machine|endpoint|computer|device|node|asset)\s+(?:named\s+|called\s+)?([A-Za-z][A-Za-z0-9._-]{1,40})\b",
         )
         .unwrap(),
         ipv4: Regex::new(r"\b(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)\b")
@@ -329,6 +338,14 @@ fn hosts_on_line(line: &str) -> Vec<HostHit> {
     for c in hp.fqdn.captures_iter(line) {
         push(&c[1], "", c.get(0).unwrap().as_str(), &mut hits, &mut seen);
     }
+    // Host named after a keyword ("server SWDEV12"); only keep host-like names
+    // so "server logs" or "affected server" are not mistaken for a host.
+    for c in hp.kw_host.captures_iter(line) {
+        let name = &c[1];
+        if looks_host_like(name) {
+            push(name, "", name, &mut hits, &mut seen);
+        }
+    }
     hits
 }
 
@@ -365,20 +382,34 @@ pub fn extract_hosts(input: &str) -> Vec<Host> {
 struct TsPatterns {
     iso: Regex,
     dmy: Regex,
+    /// Month name first: `May 4, 2024` / `Sept. 12 2023`.
+    mdy_name: Regex,
+    /// Day first: `4 May 2024` / `11 September 2023`.
+    dmy_name: Regex,
+    /// 12-hour clock: `10:00 AM`, `2:30pm`.
+    ampm: Regex,
+    /// 24-hour clock: `03:38:40` / `03:40`.
     clock: Regex,
 }
 
 fn ts_patterns() -> &'static TsPatterns {
     static P: OnceLock<TsPatterns> = OnceLock::new();
+    let month = r"jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?";
     P.get_or_init(|| TsPatterns {
-        // ISO / full datetime: 2026-03-14 09:12:05
         iso: Regex::new(r"\b(\d{4})-(\d{2})-(\d{2})[ T](\d{1,2}):(\d{2})(?::(\d{2}))?").unwrap(),
-        // Day-month-year: 14-03-2026 09:12:05 or 14/03/26 9:12
         dmy: Regex::new(
             r"\b(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})(?:[ T,]+|\s+at\s+)(\d{1,2}):(\d{2})(?::(\d{2}))?",
         )
         .unwrap(),
-        // Bare clock: 03:38:40 or 03:40
+        mdy_name: Regex::new(&format!(
+            r"(?i)\b({month})\.?\s+(\d{{1,2}})(?:st|nd|rd|th)?,?\s+(\d{{4}})"
+        ))
+        .unwrap(),
+        dmy_name: Regex::new(&format!(
+            r"(?i)\b(\d{{1,2}})(?:st|nd|rd|th)?\s+({month})\.?,?\s+(\d{{4}})"
+        ))
+        .unwrap(),
+        ampm: Regex::new(r"(?i)\b(\d{1,2}):(\d{2})(?::(\d{2}))?\s*([ap])\.?m\.?").unwrap(),
         clock: Regex::new(r"\b(\d{1,2}):(\d{2})(?::(\d{2}))?\b").unwrap(),
     })
 }
@@ -395,10 +426,49 @@ fn two_digit_year(y: u32) -> u32 {
     }
 }
 
+fn month_num(name: &str) -> u32 {
+    match name.get(..3).unwrap_or("").to_ascii_lowercase().as_str() {
+        "jan" => 1, "feb" => 2, "mar" => 3, "apr" => 4, "may" => 5, "jun" => 6,
+        "jul" => 7, "aug" => 8, "sep" => 9, "oct" => 10, "nov" => 11, "dec" => 12,
+        _ => 0,
+    }
+}
+
+/// Find a time (12- or 24-hour) anywhere on the line, as (h, m, s).
+fn find_time(line: &str) -> Option<(u32, u32, u32)> {
+    let p = ts_patterns();
+    if let Some(c) = p.ampm.captures(line) {
+        let mut h: u32 = c[1].parse().ok()?;
+        let m: u32 = c[2].parse().ok()?;
+        let s: u32 = c.get(3).map(|x| x.as_str().parse().unwrap_or(0)).unwrap_or(0);
+        let pm = c[4].eq_ignore_ascii_case("p");
+        if pm && h < 12 {
+            h += 12;
+        } else if !pm && h == 12 {
+            h = 0;
+        }
+        if valid_hms(h, m, s) {
+            return Some((h, m, s));
+        }
+    }
+    for c in p.clock.captures_iter(line) {
+        let h: u32 = c[1].parse().ok()?;
+        let m: u32 = c[2].parse().ok()?;
+        let s: u32 = c.get(3).map(|x| x.as_str().parse().unwrap_or(0)).unwrap_or(0);
+        if valid_hms(h, m, s) {
+            return Some((h, m, s));
+        }
+    }
+    None
+}
+
 /// Find the first valid timestamp on a line, returning its byte range and a
 /// normalised form: `dd-mm-yy hh:mm:ss` when a date is present, else `hh:mm:ss`.
 fn find_timestamp(line: &str) -> Option<(std::ops::Range<usize>, String)> {
     let p = ts_patterns();
+    let fmt = |d: u32, mo: u32, y: u32, h: u32, m: u32, s: u32| {
+        format!("{:02}-{:02}-{:02} {:02}:{:02}:{:02}", d, mo, two_digit_year(y), h, m, s)
+    };
 
     let grab = |c: &regex::Captures, hi: usize, mi: usize, si: usize| -> Option<(u32, u32, u32)> {
         let h: u32 = c.get(hi)?.as_str().parse().ok()?;
@@ -409,35 +479,40 @@ fn find_timestamp(line: &str) -> Option<(std::ops::Range<usize>, String)> {
 
     if let Some(c) = p.iso.captures(line) {
         if let Some((h, m, s)) = grab(&c, 4, 5, 6) {
-            let (y, mo, d) = (
-                c[1].parse::<u32>().unwrap_or(0),
-                c[2].parse::<u32>().unwrap_or(0),
-                c[3].parse::<u32>().unwrap_or(0),
-            );
             let mm = c.get(0).unwrap();
-            return Some((
-                mm.start()..mm.end(),
-                format!("{:02}-{:02}-{:02} {:02}:{:02}:{:02}", d, mo, two_digit_year(y), h, m, s),
-            ));
+            let y = c[1].parse().unwrap_or(0);
+            return Some((mm.start()..mm.end(), fmt(c[3].parse().unwrap_or(0), c[2].parse().unwrap_or(0), y, h, m, s)));
         }
     }
     if let Some(c) = p.dmy.captures(line) {
         if let Some((h, m, s)) = grab(&c, 4, 5, 6) {
-            let (d, mo, y) = (
-                c[1].parse::<u32>().unwrap_or(0),
-                c[2].parse::<u32>().unwrap_or(0),
-                c[3].parse::<u32>().unwrap_or(0),
-            );
+            let (d, mo) = (c[1].parse().unwrap_or(0), c[2].parse().unwrap_or(0));
             if d <= 31 && mo <= 12 {
                 let mm = c.get(0).unwrap();
-                return Some((
-                    mm.start()..mm.end(),
-                    format!("{:02}-{:02}-{:02} {:02}:{:02}:{:02}", d, mo, two_digit_year(y), h, m, s),
-                ));
+                return Some((mm.start()..mm.end(), fmt(d, mo, c[3].parse().unwrap_or(0), h, m, s)));
             }
         }
     }
-    // Bare clock — first range-valid match on the line.
+    // Month-name dates, optionally with a time elsewhere on the line.
+    for (re, day_i, mon_i, yr_i) in [(&p.mdy_name, 2usize, 1usize, 3usize), (&p.dmy_name, 1, 2, 3)] {
+        if let Some(c) = re.captures(line) {
+            let d: u32 = c[day_i].parse().unwrap_or(0);
+            let mo = month_num(&c[mon_i]);
+            let y: u32 = c[yr_i].parse().unwrap_or(0);
+            if (1..=31).contains(&d) && mo > 0 {
+                let (h, m, s) = find_time(line).unwrap_or((0, 0, 0));
+                let mm = c.get(0).unwrap();
+                return Some((mm.start()..mm.end(), fmt(d, mo, y, h, m, s)));
+            }
+        }
+    }
+    // Time only: 12-hour then 24-hour.
+    if let Some(c) = p.ampm.captures(line) {
+        if let Some((h, m, s)) = find_time(line) {
+            let mm = c.get(0).unwrap();
+            return Some((mm.start()..mm.end(), format!("{:02}:{:02}:{:02}", h, m, s)));
+        }
+    }
     for c in p.clock.captures_iter(line) {
         if let Some((h, m, s)) = grab(&c, 1, 2, 3) {
             let mm = c.get(0).unwrap();
@@ -497,7 +572,7 @@ pub fn extract_events(input: &str) -> Vec<TimelineEvent> {
         // timestamp and host to leave the message. Otherwise the line is prose
         // (the time sits mid-sentence), so keep the whole sentence readable.
         let leading_ws = line.len() - line.trim_start().len();
-        let description = if range.start <= leading_ws + 2 {
+        let description = if range.start <= leading_ws + 2 && !hosts.is_empty() {
             let raw = &line[range.clone()];
             let mut d = line.replacen(raw, " ", 1);
             if let Some(h) = hosts.first() {
@@ -815,6 +890,26 @@ Result: The attacker used two remote-execution techniques to move between hosts.
         let iocs = extract_iocs("dropped C:\\ProgramData\\Analytics.exe).");
         assert!(indicators(&iocs, "File Path").contains(&"C:\\ProgramData\\Analytics.exe".to_string()),
             "{:?}", indicators(&iocs, "File Path"));
+    }
+
+    #[test]
+    fn extracts_cve_and_keyword_host() {
+        let iocs = extract_iocs("The attacker exploited CVE-2023-38408 in OpenSSH on server SWDEV12.");
+        assert!(iocs.iter().any(|i| i.ioc_type == "CVE" && i.indicator == "CVE-2023-38408"),
+            "{iocs:?}");
+        let hosts = extract_hosts("Cryptomining malware detected on server SWDEV12 used for CI/CD.");
+        assert!(hosts.iter().any(|h| h.name == "SWDEV12"), "{hosts:?}");
+        // "server logs" must not become a host named "logs".
+        let hosts2 = extract_hosts("Analysis of the server logs indicated the vulnerability.");
+        assert!(!hosts2.iter().any(|h| h.name.eq_ignore_ascii_case("logs")), "{hosts2:?}");
+    }
+
+    #[test]
+    fn parses_month_name_and_ampm_times() {
+        let e = extract_events("May 4, 2024, 10:00 AM - 2:00 PM (EST) the incident occurred on the server");
+        assert_eq!(e[0].timestamp, "04-05-24 10:00:00");
+        let e2 = extract_events("11 September 2023 at 6:52 pm the DCSync completed on the controller");
+        assert_eq!(e2[0].timestamp, "11-09-23 18:52:00");
     }
 
     #[test]

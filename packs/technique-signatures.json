@@ -41,5 +41,10 @@
   { "technique": "T1218.010", "keywords": ["regsvr32", "scrobj.dll", "squiblydoo"] },
   { "technique": "T1560.001", "keywords": ["7z a", "rar a", "compress-archive", "makecab", "staged archive", "archive created"] },
   { "technique": "T1570", "keywords": ["copied to admin$", "lateral tool transfer", "staged on the share", "payload staged on"] },
-  { "technique": "T1041", "keywords": ["exfiltrat", "exfil over", "data staged for exfiltration", "beaconed the data"] }
+  { "technique": "T1041", "keywords": ["exfiltrat", "exfil over", "data staged for exfiltration", "beaconed the data"] },
+  { "technique": "T1496", "keywords": ["cryptomining", "cryptominer", "coinminer", "coin miner", "mining malware", "xmrig", "monero", "resource hijack"] },
+  { "technique": "T1190", "keywords": ["exploit public-facing", "public-facing application", "exploited the cve", "exploited a known vulnerability", "unpatched vulnerability", "vulnerability in openssh", "web shell dropped"] },
+  { "technique": "T1210", "keywords": ["exploitation of remote services", "exploited remote service", "remote code execution", " rce ", "openssh vulnerability"] },
+  { "technique": "T1486", "keywords": ["ransomware", "files were encrypted", "ransom note", "encrypted the files", "lockbit", "double extortion"] },
+  { "technique": "T1490", "keywords": ["deleted volume shadow", "vssadmin delete", "shadow copies deleted", "inhibit system recovery"] }
 ]
