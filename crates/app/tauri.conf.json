@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "IntelScribe",
-  "version": "0.1.0",
+  "version": "2.0.0",
   "identifier": "au.intelscribe.app",
   "build": {
     "frontendDist": "../../ui"
@@ -27,7 +27,7 @@
     "active": true,
     "targets": ["nsis"],
     "publisher": "Benjamin Sokimi",
-    "copyright": "Copyright © 2026 Benjamin Sokimi",
+    "copyright": "Copyright (c) 2026 Benjamin Sokimi",
     "category": "Productivity",
     "shortDescription": "Offline commercial-grade cyber report writer",
     "longDescription": "IntelScribe is an offline desktop tool for writing commercial-grade technical cyber reports — incident and penetration-test reports — with bundled MITRE ATT&CK and the ACSC ISM, CVSS scoring, attack-path maps, and Australian compliance helpers.",

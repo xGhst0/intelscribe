@@ -1,4 +1,4 @@
-# IntelScribe
+# IntelScribe 2.0
 
 **Offline desktop assistant for writing commercial-grade technical cyber reports.**
 

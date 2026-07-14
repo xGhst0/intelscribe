@@ -26,19 +26,32 @@ fn build_source(engagement: &Engagement, theme_name: &str, art_style: &str) -> S
     intelscribe_render::build_source(engagement, &theme, &tpl, art_style)
 }
 
+// Typst compilation is CPU-bound and shares a global (comemo) cache, so we run
+// it on a blocking thread and serialize renders behind one lock. This keeps the
+// heavy work off the async runtime (which otherwise stalls, making the preview
+// feel like it "doesn't update") and avoids concurrent debounced renders
+// thrashing the shared cache. The frontend's renderSeq guard still ensures only
+// the latest render paints.
+static RENDER_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 #[tauri::command(rename_all = "snake_case")]
 async fn render_preview(
     engagement: Engagement,
     theme_name: String,
     art_style: String,
 ) -> Result<Preview, String> {
-    let source = build_source(&engagement, &theme_name, &art_style);
-    let assets = intelscribe_render::collect_assets(&engagement);
-    let out = intelscribe_render::render_preview_with_assets(&source, assets, 1.5)?;
-    Ok(Preview {
-        pages: out.pages,
-        warnings: out.warnings,
+    tauri::async_runtime::spawn_blocking(move || {
+        let _guard = RENDER_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let source = build_source(&engagement, &theme_name, &art_style);
+        let assets = intelscribe_render::collect_assets(&engagement);
+        let out = intelscribe_render::render_preview_with_assets(&source, assets, 1.5)?;
+        Ok(Preview {
+            pages: out.pages,
+            warnings: out.warnings,
+        })
     })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 fn export_stem(engagement: &Engagement) -> String {
@@ -58,13 +71,19 @@ async fn export_pdf(
     theme_name: String,
     art_style: String,
 ) -> Result<String, String> {
-    let source = build_source(&engagement, &theme_name, &art_style);
-    let assets = intelscribe_render::collect_assets(&engagement);
-    let bytes = intelscribe_render::render_pdf_with_assets(&source, assets)?;
+    let stem = export_stem(&engagement);
+    let bytes = tauri::async_runtime::spawn_blocking(move || {
+        let _guard = RENDER_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let source = build_source(&engagement, &theme_name, &art_style);
+        let assets = intelscribe_render::collect_assets(&engagement);
+        intelscribe_render::render_pdf_with_assets(&source, assets)
+    })
+    .await
+    .map_err(|e| e.to_string())??;
 
     let dir = export_dir();
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    let path = dir.join(format!("{}.pdf", export_stem(&engagement)));
+    let path = dir.join(format!("{}.pdf", stem));
     std::fs::write(&path, bytes).map_err(|e| e.to_string())?;
     Ok(path.display().to_string())
 }

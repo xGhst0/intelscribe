@@ -197,12 +197,14 @@ function field(obj, key, label, kind = "text", options = null) {
       const [value, text] = Array.isArray(opt) ? opt : [opt, opt];
       input.append(el("option", { value }, text));
     }
-    input.value = obj[key] || options[0][0] || options[0];
+    input.value = obj[key] || (Array.isArray(options[0]) ? options[0][0] : options[0]);
   } else {
     input = el("input", { type: "text" });
     input.value = obj[key] || "";
   }
   input.addEventListener("input", () => { obj[key] = input.value; schedule(); });
+  // Also render immediately when leaving the field or picking from a select.
+  input.addEventListener("change", () => { obj[key] = input.value; requestRender(); });
   return wrapField(label, input);
 }
 
@@ -899,6 +901,18 @@ function rebuild() {
 
 let renderSeq = 0;
 let timer = null;
+let rendering = false;
+let pending = false;
+
+/* Kick a render now, coalescing with any in-flight one. If a render is already
+   running, mark the state dirty so a single trailing render fires when it
+   finishes — this guarantees the latest edits always paint and prevents fast
+   edits from piling up overlapping renders. */
+function requestRender() {
+  clearTimeout(timer);
+  if (rendering) { pending = true; return; }
+  renderPreview();
+}
 
 function setStatus(text, isError = false) {
   const s = $("#status");
@@ -940,10 +954,12 @@ async function runLint() {
 
 function schedule() {
   clearTimeout(timer);
-  timer = setTimeout(renderPreview, 500);
+  timer = setTimeout(requestRender, 250);
 }
 
 async function renderPreview() {
+  rendering = true;
+  pending = false;
   const seq = ++renderSeq;
   runLint();
   setStatus("Rendering…");
@@ -968,6 +984,10 @@ async function renderPreview() {
     }
   } catch (err) {
     if (seq === renderSeq) setStatus(String(err), true);
+  } finally {
+    rendering = false;
+    // Edits that arrived while this render was in flight → paint them now.
+    if (pending) renderPreview();
   }
 }
 
@@ -996,7 +1016,7 @@ async function init() {
     if (!confirm("Start a new, empty report? Unsaved changes will be lost.")) return;
     state = defaultEngagement();
     rebuild();
-    renderPreview();
+    requestRender();
   });
 
   $("#btn-save").addEventListener("click", async () => {
@@ -1018,7 +1038,7 @@ async function init() {
       if (engagement) {
         state = engagement;
         rebuild();
-        renderPreview();
+        requestRender();
         setStatus("Opened " + (state.title || "report") + ".");
       }
     } catch (err) {
@@ -1032,7 +1052,7 @@ async function init() {
       if (engagement) {
         state = engagement;
         rebuild();
-        renderPreview();
+        requestRender();
         setStatus("Opened " + (state.title || "report") + ".");
       }
     } catch (err) {
@@ -1078,7 +1098,7 @@ async function init() {
   refreshIsmList("");
   refreshRecent();
   rebuild();
-  renderPreview();
+  requestRender();
 }
 
 async function refreshRecent() {

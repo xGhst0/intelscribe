@@ -2531,7 +2531,7 @@ dependencies = [
 
 [[package]]
 name = "intelscribe-app"
-version = "0.1.0"
+version = "2.0.0"
 dependencies = [
  "base64 0.22.1",
  "intelscribe-core",
@@ -2548,7 +2548,7 @@ dependencies = [
 
 [[package]]
 name = "intelscribe-core"
-version = "0.1.0"
+version = "2.0.0"
 dependencies = [
  "regex",
  "serde",
@@ -2558,7 +2558,7 @@ dependencies = [
 
 [[package]]
 name = "intelscribe-render"
-version = "0.1.0"
+version = "2.0.0"
 dependencies = [
  "base64 0.22.1",
  "docx-rs",
