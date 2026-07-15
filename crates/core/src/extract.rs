@@ -9,7 +9,7 @@ use std::sync::OnceLock;
 
 use regex::Regex;
 
-use crate::model::{Detection, Host, Ioc, Phase, TimelineEvent};
+use crate::model::{Account, Detection, Host, Ioc, Phase, TimelineEvent};
 
 /// File extensions that should be treated as filenames, not domains, when they
 /// appear as a bare `name.ext` token.
@@ -724,6 +724,133 @@ pub fn extract_detections(input: &str) -> Vec<Detection> {
     out
 }
 
+// ---------------------------------------------------------------------------
+// Account extraction
+// ---------------------------------------------------------------------------
+
+struct AccountPatterns {
+    /// `DOMAIN\user` — the strongest signal of an account.
+    domain: Regex,
+    /// Machine / service accounts ending in `$` (e.g. `WIN-DC01$`).
+    machine: Regex,
+    /// Name after the word: "account svc_backup", "user account: administrator".
+    kw_after: Regex,
+    /// Name before the word: "the krbtgt account", "jsmith account".
+    kw_before: Regex,
+    /// Service-account naming conventions: `svc_backup`, `svc-sql`, `sa_admin`.
+    service: Regex,
+}
+
+fn account_patterns() -> &'static AccountPatterns {
+    static P: OnceLock<AccountPatterns> = OnceLock::new();
+    P.get_or_init(|| AccountPatterns {
+        domain: Regex::new(r"\b([A-Za-z0-9._\-]{1,30})\\([A-Za-z0-9._\-$]{1,64})\b").unwrap(),
+        machine: Regex::new(r"\b([A-Za-z0-9._\-]{2,64}\$)").unwrap(),
+        kw_after: Regex::new(r"(?i)\baccount\s*:?\s+([A-Za-z0-9._\-\\$]{2,64})").unwrap(),
+        kw_before: Regex::new(r"(?i)\b([A-Za-z0-9._\-\\$]{2,64})\s+account\b").unwrap(),
+        service: Regex::new(r"(?i)\b((?:svc|sa|sql|adm)[._\-][A-Za-z0-9._\-]{2,40})\b").unwrap(),
+    })
+}
+
+/// Words adjacent to "account" that are filler (adjectives, verbs, articles)
+/// rather than account names. Compared case-insensitively.
+const NON_ACCOUNT: &[&str] = &[
+    "activity", "was", "is", "were", "are", "be", "been", "for", "the", "and",
+    "with", "used", "using", "had", "has", "have", "targeted", "performed",
+    "management", "takeover", "lockout", "creation", "access", "name", "names",
+    "compromise", "compromised", "credentials", "details", "logon", "login",
+    "of", "on", "in", "to", "by", "that", "which", "this", "these", "an", "a",
+    "named", "called", "service", "user", "domain", "local", "privileged",
+    "machine", "admin", "new", "same", "affected", "another", "each", "their",
+    "his", "her", "its", "our", "your", "single", "default", "built-in",
+];
+
+/// Extract affected user / service / machine accounts from free text. Matches
+/// `DOMAIN\user`, machine accounts (`HOST$`), service-account naming
+/// (`svc_backup`), and keyword-prefixed mentions ("the jsmith account").
+/// Deduplicated case-insensitively; deterministic and offline.
+fn push_account(name: &str, out: &mut Vec<Account>, seen: &mut Vec<String>) {
+    let name = name.trim().trim_matches(|c: char| ".,;:'\"()[]".contains(c));
+    if name.len() < 2 {
+        return;
+    }
+    // Reject pure filler and bare non-account keywords.
+    let low = name.to_ascii_lowercase();
+    if NON_ACCOUNT.contains(&low.as_str()) {
+        return;
+    }
+    // An account must contain at least one alphanumeric character.
+    if !name.chars().any(|c| c.is_ascii_alphanumeric()) {
+        return;
+    }
+    if seen.iter().any(|s| *s == low) {
+        return;
+    }
+    seen.push(low);
+    out.push(Account {
+        name: name.to_string(),
+        description: "Identified during automated extraction.".to_string(),
+    });
+}
+
+pub fn extract_accounts(input: &str) -> Vec<Account> {
+    let p = account_patterns();
+    let mut out: Vec<Account> = Vec::new();
+    let mut seen: Vec<String> = Vec::new();
+
+    for line in input.lines() {
+        // Keep the full DOMAIN\user form — it is the canonical identifier.
+        for c in p.domain.captures_iter(line) {
+            push_account(c.get(0).unwrap().as_str(), &mut out, &mut seen);
+        }
+        for c in p.machine.captures_iter(line) {
+            push_account(&c[1], &mut out, &mut seen);
+        }
+        for c in p.kw_after.captures_iter(line) {
+            push_account(&c[1], &mut out, &mut seen);
+        }
+        for c in p.kw_before.captures_iter(line) {
+            push_account(&c[1], &mut out, &mut seen);
+        }
+        for c in p.service.captures_iter(line) {
+            push_account(&c[1], &mut out, &mut seen);
+        }
+        if out.len() >= 50 {
+            break;
+        }
+    }
+    out
+}
+
+// ---------------------------------------------------------------------------
+// CVSS vector extraction
+// ---------------------------------------------------------------------------
+
+fn cvss_pattern() -> &'static Regex {
+    static P: OnceLock<Regex> = OnceLock::new();
+    P.get_or_init(|| {
+        Regex::new(r"(?i)\bCVSS:3\.[01]/(?:A[VC]|PR|UI|S|[CIA]):[A-Z](?:/(?:A[VC]|PR|UI|S|[CIA]):[A-Z])*")
+            .unwrap()
+    })
+}
+
+/// Extract CVSS 3.0/3.1 base vectors that appear verbatim in the text (e.g. a
+/// pasted advisory or scanner output). Normalised to uppercase and
+/// deduplicated, most-complete first. Deterministic and offline.
+pub fn extract_cvss(input: &str) -> Vec<String> {
+    let re = cvss_pattern();
+    let mut out: Vec<String> = Vec::new();
+    for m in re.find_iter(input) {
+        let vec = m.as_str().to_ascii_uppercase().replace("CVSS:3.0", "CVSS:3.1");
+        if !out.contains(&vec) {
+            out.push(vec);
+        }
+    }
+    // Prefer full 8-metric vectors first so the strongest match is offered.
+    out.sort_by_key(|v| std::cmp::Reverse(v.matches('/').count()));
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -835,6 +962,45 @@ Result: The attacker used two remote-execution techniques to move between hosts.
         assert!(!dets[0].query.contains("PsExec service installs"), "sub-label leaked");
         assert!(!dets[0].query.contains("30"), "page number leaked");
         assert!(dets[0].result.contains("two remote-execution techniques"));
+    }
+
+    #[test]
+    fn extracts_accounts_of_each_form() {
+        let text = "\
+The attacker compromised CORP\\jsmith and pivoted using the service account svc_backup.\n\
+Machine account WIN-DC01$ authenticated to the domain controller.\n\
+Privileged account: Administrator was used for lateral movement.\n\
+The krbtgt account was targeted for a golden-ticket attack.";
+        let accts: Vec<String> = extract_accounts(text).into_iter().map(|a| a.name).collect();
+        assert!(accts.iter().any(|a| a.eq_ignore_ascii_case("CORP\\jsmith")), "{accts:?}");
+        assert!(accts.iter().any(|a| a.eq_ignore_ascii_case("svc_backup")), "{accts:?}");
+        assert!(accts.iter().any(|a| a == "WIN-DC01$"), "{accts:?}");
+        assert!(accts.iter().any(|a| a.eq_ignore_ascii_case("Administrator")), "{accts:?}");
+        assert!(accts.iter().any(|a| a.eq_ignore_ascii_case("krbtgt")), "{accts:?}");
+    }
+
+    #[test]
+    fn account_extraction_rejects_filler_and_dedups() {
+        let text = "The account activity was suspicious. CORP\\jsmith logged in. Again CORP\\jsmith.";
+        let accts = extract_accounts(text);
+        // "activity" is filler, not an account; jsmith appears once.
+        assert!(!accts.iter().any(|a| a.name.eq_ignore_ascii_case("activity")));
+        assert_eq!(
+            accts.iter().filter(|a| a.name.eq_ignore_ascii_case("CORP\\jsmith")).count(),
+            1,
+        );
+    }
+
+    #[test]
+    fn extracts_cvss_vectors_from_text() {
+        let text = "\
+The vulnerability scored CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H (Critical).\n\
+A second issue was rated cvss:3.0/av:n/ac:h/pr:l/ui:r/s:c/c:l/i:l/a:n.";
+        let vectors = extract_cvss(text);
+        assert!(vectors.contains(&"CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H".to_string()), "{vectors:?}");
+        // 3.0 normalised to 3.1 and upper-cased.
+        assert!(vectors.iter().any(|v| v.starts_with("CVSS:3.1/AV:N/AC:H")), "{vectors:?}");
+        assert_eq!(vectors.len(), 2);
     }
 
     #[test]

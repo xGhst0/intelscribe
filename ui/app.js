@@ -40,6 +40,8 @@ function mockInvoke(cmd) {
     case "extract_hosts":
     case "extract_events":
     case "extract_detections":
+    case "extract_accounts":
+    case "extract_cvss":
     case "suggest_techniques":
     case "lint_report":
       return [];
@@ -520,6 +522,15 @@ function mergeHosts(inc, incoming) {
   return added;
 }
 
+function mergeAccounts(inc, incoming) {
+  let added = 0;
+  for (const a of incoming) {
+    const dup = inc.accounts.some((x) => x.name.toLowerCase() === a.name.toLowerCase());
+    if (!dup) { inc.accounts.push(a); added++; }
+  }
+  return added;
+}
+
 function mergeEvents(inc, incoming) {
   let added = 0;
   for (const ev of incoming) {
@@ -561,24 +572,48 @@ function quickImport(inc) {
     }
   }
 
+  async function runCvss() {
+    if (!text()) { setStatus("Paste some text into the import box first."); return; }
+    try {
+      const vectors = await invoke("extract_cvss", { text: text() });
+      if (!vectors.length) { setStatus("No CVSS vector found in the pasted text."); return; }
+      inc.cvss_vector = vectors[0];
+      rebuild();
+      schedule();
+      const extra = vectors.length > 1 ? ` (${vectors.length - 1} other vector(s) ignored)` : "";
+      setStatus(`CVSS: adopted ${vectors[0]}${extra}. Review in the CVSS 3.1 section.`);
+    } catch (err) {
+      setStatus(String(err), true);
+    }
+  }
+
   async function runAll(t) {
     if (!t || !t.trim()) { setStatus("No text to extract from."); return; }
     try {
-      const [iocs, hosts, events, dets, techs] = await Promise.all([
+      const [iocs, hosts, events, dets, accts, cvss, techs] = await Promise.all([
         invoke("extract_iocs", { text: t }),
         invoke("extract_hosts", { text: t }),
         invoke("extract_events", { text: t }),
         invoke("extract_detections", { text: t }),
+        invoke("extract_accounts", { text: t }),
+        invoke("extract_cvss", { text: t }),
         invoke("suggest_techniques", { text: t }),
       ]);
       const h = mergeHosts(inc, hosts);
       const ev = mergeEvents(inc, events);
       const de = mergeDetections(inc, dets);
       const io = mergeIocs(inc, iocs);
+      const ac = mergeAccounts(inc, accts);
       const te = mergeTechniques(inc, techs);
+      // Adopt a CVSS vector found in the source only if none is set yet.
+      let cvssNote = "";
+      if (cvss.length && !inc.cvss_vector.trim()) {
+        inc.cvss_vector = cvss[0];
+        cvssNote = `, CVSS vector ${cvss[0]}`;
+      }
       rebuild();
       schedule();
-      setStatus(`Extracted — ${h} hosts, ${ev} timeline events, ${de} detections, ${io} IoCs, ${te} techniques added (duplicates skipped). Review and prune.`);
+      setStatus(`Extracted — ${h} hosts, ${ac} accounts, ${ev} timeline events, ${de} detections, ${io} IoCs, ${te} techniques${cvssNote} added (duplicates skipped). Review and prune.`);
     } catch (err) {
       setStatus(String(err), true);
     }
@@ -619,6 +654,9 @@ function quickImport(inc) {
         onclick: () => run("extract_detections", mergeDetections, "Detection extraction") }, "🔎 Detections"),
       el("button", { class: "add", type: "button",
         onclick: () => run("extract_iocs", mergeIocs, "IoC extraction") }, "⬇ IoCs"),
+      el("button", { class: "add", type: "button",
+        onclick: () => run("extract_accounts", mergeAccounts, "Account extraction") }, "👤 Accounts"),
+      el("button", { class: "add", type: "button", onclick: runCvss }, "🎯 CVSS"),
       el("button", { class: "add", type: "button",
         onclick: () => run("suggest_techniques", mergeTechniques, "ATT&CK suggestions") }, "✨ ATT&CK"),
     ),
