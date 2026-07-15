@@ -140,6 +140,11 @@ fn extract_cvss(text: String) -> Vec<String> {
 }
 
 #[tauri::command(rename_all = "snake_case")]
+fn extract_findings(text: String) -> Vec<intelscribe_core::model::Finding> {
+    extract::extract_findings(&text)
+}
+
+#[tauri::command(rename_all = "snake_case")]
 fn suggest_techniques(text: String) -> Vec<packs::Technique> {
     packs::suggest_techniques(&text)
 }
@@ -498,6 +503,7 @@ fn main() {
             extract_detections,
             extract_accounts,
             extract_cvss,
+            extract_findings,
             suggest_techniques,
             lint_report,
             score_cvss,

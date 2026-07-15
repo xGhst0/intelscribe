@@ -9,7 +9,7 @@ use std::sync::OnceLock;
 
 use regex::Regex;
 
-use crate::model::{Account, Detection, Host, Ioc, Phase, TimelineEvent};
+use crate::model::{Account, Detection, Finding, Host, Ioc, Phase, Severity, TimelineEvent};
 
 /// File extensions that should be treated as filenames, not domains, when they
 /// appear as a bare `name.ext` token.
@@ -851,6 +851,183 @@ pub fn extract_cvss(input: &str) -> Vec<String> {
     out
 }
 
+// ---------------------------------------------------------------------------
+// Pentest finding extraction
+// ---------------------------------------------------------------------------
+
+/// The labelled fields inside a finding block. `None` means "no field open yet".
+#[derive(Clone, Copy, PartialEq)]
+enum FField {
+    None,
+    Severity,
+    Cvss,
+    Category,
+    Affected,
+    Description,
+    Impact,
+    Remediation,
+    Status,
+}
+
+fn finding_header() -> &'static Regex {
+    static P: OnceLock<Regex> = OnceLock::new();
+    P.get_or_init(|| {
+        Regex::new(r"(?i)^\s*(?:finding|vulnerability|vuln|issue|weakness)\s*#?\s*\d*\s*[:.\-)]\s*(.+?)\s*$")
+            .unwrap()
+    })
+}
+
+/// Recognise a `Label: value` line and map the label to a finding field.
+/// Returns the field and the trailing value (may be empty).
+fn finding_field_label(line: &str) -> Option<(FField, String)> {
+    let (label, rest) = line.split_once(':')?;
+    let key = label.trim().to_ascii_lowercase();
+    // Reject labels that are really prose ("On the other hand: ...").
+    if key.split_whitespace().count() > 3 {
+        return None;
+    }
+    let field = match key.as_str() {
+        "severity" | "risk" | "risk rating" | "rating" => FField::Severity,
+        "cvss" | "cvss score" | "cvss vector" | "cvss 3.1" | "cvss3.1" | "score" => FField::Cvss,
+        "category" | "type" | "class" | "classification" | "owasp" => FField::Category,
+        "affected" | "affected asset" | "affected assets" | "affected system"
+        | "affected systems" | "affected host" | "affected hosts" | "location"
+        | "url" | "endpoint" | "target" | "asset" | "assets" => FField::Affected,
+        "description" | "details" | "detail" | "summary" | "observation"
+        | "finding detail" => FField::Description,
+        "impact" | "business impact" | "risk impact" => FField::Impact,
+        "remediation" | "recommendation" | "recommendations" | "fix"
+        | "mitigation" | "resolution" | "remediation advice" => FField::Remediation,
+        "status" | "state" | "remediation status" => FField::Status,
+        _ => return None,
+    };
+    Some((field, rest.trim().to_string()))
+}
+
+fn parse_severity(s: &str) -> Option<Severity> {
+    let low = s.trim().to_ascii_lowercase();
+    // Match on the first recognised severity word so "High (7.5)" still parses.
+    for word in low.split(|c: char| !c.is_ascii_alphanumeric()) {
+        match word {
+            "critical" | "crit" => return Some(Severity::Critical),
+            "high" => return Some(Severity::High),
+            "medium" | "moderate" | "med" => return Some(Severity::Medium),
+            "low" | "minor" => return Some(Severity::Low),
+            "informational" | "info" | "information" | "none" => {
+                return Some(Severity::Informational)
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+fn normalise_status(s: &str) -> String {
+    let low = s.trim().to_ascii_lowercase();
+    if low.contains("remediat") || low.contains("fixed") || low.contains("closed")
+        || low.contains("resolved")
+    {
+        "Remediated".to_string()
+    } else if low.contains("risk accept") || low.contains("accepted") {
+        "Risk Accepted".to_string()
+    } else if low.contains("n/a") || low.contains("not applicable") {
+        "Not Applicable".to_string()
+    } else {
+        "Open".to_string()
+    }
+}
+
+/// Extract penetration-test findings from a structured report paste. Recognises
+/// `Finding N: Title` / `Vulnerability: Title` headers and the labelled fields
+/// beneath (Severity, CVSS, Category, Affected, Description, Impact,
+/// Remediation, Status), folding continuation lines into the open field. A CVSS
+/// vector anywhere in the block is captured even without a label. Deterministic
+/// and offline.
+pub fn extract_findings(input: &str) -> Vec<Finding> {
+    let mut out: Vec<Finding> = Vec::new();
+    let mut cur: Option<Finding> = None;
+    let mut field = FField::None;
+
+    let append = |s: &mut String, text: &str| {
+        let t = text.trim();
+        if t.is_empty() {
+            return;
+        }
+        if !s.is_empty() {
+            s.push(' ');
+        }
+        s.push_str(t);
+    };
+
+    for raw in input.lines() {
+        let trimmed = raw.trim();
+
+        if let Some(caps) = finding_header().captures(trimmed) {
+            if let Some(f) = cur.take() {
+                out.push(f);
+            }
+            let mut f = Finding::default();
+            f.title = caps.get(1).map(|m| m.as_str().trim().to_string()).unwrap_or_default();
+            f.status = "Open".to_string();
+            cur = Some(f);
+            field = FField::None;
+            continue;
+        }
+
+        let Some(f) = cur.as_mut() else { continue };
+
+        if trimmed.is_empty() || is_page_number(trimmed) {
+            continue;
+        }
+
+        if let Some((kind, rest)) = finding_field_label(trimmed) {
+            field = kind;
+            match kind {
+                FField::Severity => {
+                    if let Some(sev) = parse_severity(&rest) {
+                        f.severity = sev;
+                    }
+                }
+                FField::Cvss => {
+                    if let Some(v) = extract_cvss(&rest).into_iter().next() {
+                        f.cvss_vector = v;
+                    }
+                }
+                FField::Category => append(&mut f.category, &rest),
+                FField::Affected => append(&mut f.affected, &rest),
+                FField::Description => append(&mut f.description, &rest),
+                FField::Impact => append(&mut f.impact, &rest),
+                FField::Remediation => append(&mut f.remediation, &rest),
+                FField::Status => f.status = normalise_status(&rest),
+                FField::None => {}
+            }
+            continue;
+        }
+
+        // A CVSS vector on its own line, even without a "CVSS:" label.
+        if f.cvss_vector.is_empty() {
+            if let Some(v) = extract_cvss(trimmed).into_iter().next() {
+                f.cvss_vector = v;
+                continue;
+            }
+        }
+
+        // Continuation of the current prose field.
+        match field {
+            FField::Category => append(&mut f.category, trimmed),
+            FField::Affected => append(&mut f.affected, trimmed),
+            FField::Description => append(&mut f.description, trimmed),
+            FField::Impact => append(&mut f.impact, trimmed),
+            FField::Remediation => append(&mut f.remediation, trimmed),
+            _ => {}
+        }
+    }
+    if let Some(f) = cur.take() {
+        out.push(f);
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -989,6 +1166,46 @@ The krbtgt account was targeted for a golden-ticket attack.";
             accts.iter().filter(|a| a.name.eq_ignore_ascii_case("CORP\\jsmith")).count(),
             1,
         );
+    }
+
+    #[test]
+    fn extracts_pentest_findings() {
+        let block = "\
+Finding 1: SQL Injection in the login form\n\
+Severity: High\n\
+CVSS: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H\n\
+Category: Injection (OWASP A03)\n\
+Affected: https://app.example.com/login\n\
+Description: The username parameter is concatenated directly into a SQL query.\n\
+An attacker can bypass authentication and read arbitrary tables.\n\
+Impact: Full compromise of the application database.\n\
+Remediation: Use parameterised queries and validate input.\n\
+Status: Open\n\
+\n\
+Finding 2: Missing HTTP security headers\n\
+Risk: Low\n\
+Affected: All application responses\n\
+Description: Responses lack Content-Security-Policy and HSTS.\n\
+Recommendation: Add the standard security header set at the reverse proxy.\n\
+Status: Remediated";
+        let findings = extract_findings(block);
+        assert_eq!(findings.len(), 2, "{findings:?}");
+
+        assert_eq!(findings[0].title, "SQL Injection in the login form");
+        assert_eq!(findings[0].severity, Severity::High);
+        assert_eq!(findings[0].cvss_vector, "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H");
+        assert!(findings[0].category.contains("Injection"));
+        assert!(findings[0].affected.contains("app.example.com/login"));
+        // Continuation line folded into the description.
+        assert!(findings[0].description.contains("bypass authentication"), "{}", findings[0].description);
+        assert!(findings[0].remediation.contains("parameterised"));
+        assert_eq!(findings[0].status, "Open");
+
+        assert_eq!(findings[1].title, "Missing HTTP security headers");
+        assert_eq!(findings[1].severity, Severity::Low);
+        // "Recommendation:" maps to remediation.
+        assert!(findings[1].remediation.contains("security header"));
+        assert_eq!(findings[1].status, "Remediated");
     }
 
     #[test]

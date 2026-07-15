@@ -42,6 +42,7 @@ function mockInvoke(cmd) {
     case "extract_detections":
     case "extract_accounts":
     case "extract_cvss":
+    case "extract_findings":
     case "suggest_techniques":
     case "lint_report":
       return [];
@@ -831,9 +832,72 @@ async function pentestAutoDraft() {
   }
 }
 
+function mergeFindings(incoming) {
+  let added = 0;
+  for (const f of incoming) {
+    const dup = state.findings.some(
+      (x) => x.title.trim().toLowerCase() === f.title.trim().toLowerCase());
+    if (!dup) {
+      // Fill in defaults the extractor leaves unset so the form stays consistent.
+      state.findings.push(Object.assign(defaultFinding(), f));
+      added++;
+    }
+  }
+  return added;
+}
+
+/* Paste a structured pentest report → extract findings (title, severity, CVSS,
+   category, affected, description, impact, remediation, status). */
+function pentestQuickImport() {
+  const wrap = el("div");
+  const ta = el("textarea", {
+    placeholder: "Paste findings — e.g.\nFinding 1: SQL Injection\nSeverity: High\nCVSS: CVSS:3.1/AV:N/...\nAffected: /login\nDescription: …\nRemediation: …",
+  });
+  ta.style.minHeight = "96px";
+
+  async function run(t) {
+    const text = (t || ta.value).trim();
+    if (!text) { setStatus("Paste some findings text first."); return; }
+    try {
+      const items = await invoke("extract_findings", { text });
+      const added = mergeFindings(items);
+      rebuild();
+      schedule();
+      setStatus(`Findings: parsed ${items.length}, added ${added} new (duplicates skipped). Review and prune.`);
+    } catch (err) {
+      setStatus(String(err), true);
+    }
+  }
+
+  async function importFile() {
+    setStatus("Reading document…");
+    try {
+      const t = await invoke("import_document");
+      if (t === null) { setStatus("Import cancelled."); return; }
+      if (!t.trim()) { setStatus("No readable text found in that file."); return; }
+      ta.value = t;
+      await run(t);
+    } catch (err) {
+      setStatus(String(err), true);
+    }
+  }
+
+  wrap.append(
+    el("div", { class: "import-hint" },
+      "Import a document (.txt, .docx, .doc, .pdf) or paste structured findings — IntelScribe parses each into a finding, then you review."),
+    el("button", { class: "add import-primary", type: "button", onclick: importFile },
+      "📄 Import document → extract findings"),
+    ta,
+    el("button", { class: "add import-primary", type: "button", onclick: () => run() },
+      "⚡ Extract findings from paste"),
+  );
+  return wrap;
+}
+
 /* Penetration-test form: exec summary, scope, methodology, findings. */
 function pentestForm() {
   return el("div", {},
+    section("Quick import — paste report → extract findings", false, pentestQuickImport()),
     el("button", { class: "add", type: "button", onclick: pentestAutoDraft },
       "✨ Auto-draft executive summary from findings"),
     field(state, "executive_summary", "Executive summary", "textarea"),
