@@ -89,30 +89,43 @@ git clone https://github.com/xGhst0/intelscribe.git
 cd intelscribe
 ```
 
-### 3. Run
+### 3. Install (recommended — builds the app **and** a Desktop shortcut)
 
 ```powershell
-cargo run -p intelscribe-app
+powershell -ExecutionPolicy Bypass -File install.ps1
 ```
 
-The first build compiles all dependencies (including the Typst engine) and can
-take several minutes; subsequent runs are incremental and start in seconds.
+`install.ps1` ships in the repo, so cloning is all you need: it builds the
+optimised release executable and drops a double-clickable **IntelScribe**
+shortcut (with the app icon) on your Desktop — the "installed program"
+experience, no separate installer step. Re-run it any time to rebuild and
+refresh the shortcut. The first build compiles all dependencies (including the
+Typst engine) and can take several minutes; subsequent runs are incremental.
 
 The knowledge packs (MITRE ATT&CK, ACSC ISM) are already committed under
 `packs/`, so no download step is required — the app is fully functional offline
 out of the box. Click **New** to start a blank report; **Export PDF** writes a
 themed PDF to `Desktop\IntelScribe Exports\`.
 
-### Build a standalone app
+### Run from source (no shortcut)
 
-For a polished, double-clickable program (embedded icon, no console window):
+To just launch it during development:
+
+```powershell
+cargo run -p intelscribe-app
+```
+
+### Build a standalone app manually
+
+`install.ps1` does this for you, but if you want only the executable:
 
 ```powershell
 cargo build --release -p intelscribe-app
 ```
 
 This produces `target\release\intelscribe-app.exe` — a self-contained app you
-can pin to the taskbar or place a shortcut to. To build a Windows installer
+can pin to the taskbar. `tools\make-shortcut.ps1` places the Desktop shortcut to
+it (this is what `install.ps1` calls). To build a Windows installer
 (NSIS, per-user, no admin required) install the Tauri CLI once and run:
 
 ```powershell
